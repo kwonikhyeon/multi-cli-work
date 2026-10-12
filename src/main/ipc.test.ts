@@ -898,6 +898,9 @@ describe("main IPC boundary", () => {
     await handlers.get("settings:update")!({}, { general: { summonShortcut: null } });
     expect(() => handlers.get("settings:update")!({}, { general: { summonShortcut: "M" } })).toThrow(/summonShortcut/);
     expect(() => handlers.get("settings:update")!({}, { general: { summonShortcut: "Shift+M" } })).toThrow(/summonShortcut/);
+    await handlers.get("settings:update")!({}, { general: { taskbarProgress: false } });
+    expect(settingsGateway.update).toHaveBeenCalledWith({ general: { taskbarProgress: false } });
+    expect(() => handlers.get("settings:update")!({}, { general: { taskbarProgress: "off" } })).toThrow(/taskbarProgress/);
   });
 
   it("accepts quiet hours and a snooze, and rejects malformed ones", async () => {

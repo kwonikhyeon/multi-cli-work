@@ -340,7 +340,7 @@ export function validateSettingsPatch(value: unknown): AppSettingsPatch {
   if (raw.general !== undefined) {
     const general = exactObject(
       raw.general,
-      ["closeToTray", "autoResumeSessions", "autoCheckUpdates", "summonShortcut", "reduceMotion"],
+      ["closeToTray", "autoResumeSessions", "autoCheckUpdates", "summonShortcut", "taskbarProgress", "reduceMotion"],
       "Settings general",
     );
     patch.general = {};
@@ -350,6 +350,9 @@ export function validateSettingsPatch(value: unknown): AppSettingsPatch {
     }
     if (general.autoCheckUpdates !== undefined) {
       patch.general.autoCheckUpdates = booleanValue(general.autoCheckUpdates, "Settings autoCheckUpdates");
+    }
+    if (general.taskbarProgress !== undefined) {
+      patch.general.taskbarProgress = booleanValue(general.taskbarProgress, "Settings taskbarProgress");
     }
     if (general.reduceMotion !== undefined) {
       patch.general.reduceMotion = booleanValue(general.reduceMotion, "Settings reduceMotion");

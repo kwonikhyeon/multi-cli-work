@@ -1569,7 +1569,9 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
     const popover = page.getByRole("dialog", { name: "구독 사용량" });
     const codex = popover.getByRole("region", { name: "Codex 사용량" });
     await expect(codex).toContainText("pro");
-    await expect(codex).toContainText(/(59분|1시간) 후 초기화/);
+    // The reset was set an hour ahead in beforeAll; however long the suite took to get here, it is
+    // still under an hour away.
+    await expect(codex).toContainText(/(\d{1,2}분|1시간) 후 초기화/);
     await attachScreenshot("usage-gauge");
     await page.keyboard.press("Escape");
     await expect(popover).toBeHidden();
