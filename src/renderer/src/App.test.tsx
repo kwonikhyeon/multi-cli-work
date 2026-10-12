@@ -4314,6 +4314,50 @@ describe("folder colour", () => {
     expect(document.querySelector(".pane-header .status-dot")).toHaveClass("status-idle");
   });
 
+  it("marks a pane that just finished a real turn, and not one that only flickered", async () => {
+    const harness = createApi({ projects: [atlas], sessions: [powershellSession] });
+    window.multiCliWork = harness.api;
+    const now = vi.spyOn(Date, "now");
+    try {
+      render(<App />);
+      await screen.findByRole("button", { name: "Atlas 폴더 선택" });
+      const pane = () => document.querySelector(".grid-pane") as HTMLElement;
+
+      now.mockReturnValue(10_000);
+      await act(async () => harness.emit({ type: "status", sessionId: powershellSession.id, status: "working" }));
+      now.mockReturnValue(10_500);
+      await act(async () => harness.emit({ type: "status", sessionId: powershellSession.id, status: "idle" }));
+      expect(pane()).not.toHaveClass("just-completed");
+
+      now.mockReturnValue(20_000);
+      await act(async () => harness.emit({ type: "status", sessionId: powershellSession.id, status: "working" }));
+      now.mockReturnValue(25_000);
+      await act(async () => harness.emit({ type: "status", sessionId: powershellSession.id, status: "idle" }));
+      expect(pane()).toHaveClass("just-completed", "status-idle");
+      // The pane is on screen and glows already, so it does not also get a toast.
+      expect(document.querySelector(".toast")).not.toBeInTheDocument();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("toasts a session the user cannot see when it fails, and opens it on click", async () => {
+    const beta: SharedProject = { ...atlas, id: "project-beta", rootPath: "C:\\work\\beta", displayName: "Beta", order: 2 };
+    const hidden: TerminalSessionView = { ...powershellSession, id: "session-beta", projectId: beta.id, pid: 4301 };
+    const harness = createApi({ projects: [atlas, beta], sessions: [powershellSession, hidden] });
+    window.multiCliWork = harness.api;
+    render(<App />);
+    await screen.findByRole("button", { name: "Atlas 폴더 선택" });
+
+    await act(async () => harness.emit({ type: "status", sessionId: hidden.id, status: "error" }));
+    const toast = await screen.findByRole("button", { name: /오류로 멈췄습니다/ });
+    expect(toast.closest(".toast")).toHaveClass("toast-error");
+
+    await act(async () => fireEvent.click(toast));
+    await waitFor(() => expect(document.querySelector(".toast")).not.toBeInTheDocument());
+    await waitFor(() => expect(folderRow("Beta")).toHaveClass("selected"));
+  });
+
   it("keeps the working rail and approval alert visible together, expanded and collapsed", async () => {
     const working: TerminalSessionView = { ...powershellSession, status: "working" };
     const approval: TerminalSessionView = {

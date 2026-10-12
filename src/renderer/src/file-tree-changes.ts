@@ -13,6 +13,8 @@ export interface FileTreeChangeOverlay {
   originByPath: Map<string, ChangeOrigin>;
   /** Every folder with a change somewhere below it, at any depth. Agent wins on a shared ancestor. */
   changedDirs: Map<string, ChangeOrigin>;
+  /** Files an agent edited moments ago, plus every folder above them. Absent when nothing is fresh. */
+  fresh?: ReadonlySet<string>;
 }
 
 export const EMPTY_CHANGE_OVERLAY: FileTreeChangeOverlay = {
@@ -68,6 +70,45 @@ export function changeRowClass(
     if (below) return BELOW_CLASS[below];
   }
   return null;
+}
+
+/**
+ * Agent edits that arrived between two reads: a path that is new, or one edited again since. With
+ * no earlier read (first load, a target switch, a failed read) nothing is fresh — the whole index
+ * would otherwise light up at once.
+ */
+export function freshAgentPaths(previous: WorkspaceChangedPaths | null, next: WorkspaceChangedPaths): string[] {
+  if (!previous) return [];
+  const seenAt = new Map(previous.agentPaths.map((entry) => [entry.relativePath, entry.at]));
+  return next.agentPaths
+    .filter((entry) => entry.at > (seenAt.get(entry.relativePath) ?? -Infinity))
+    .map((entry) => entry.relativePath);
+}
+
+/** The overlay with `fresh` filled in: each fresh file and the folders above it, so a collapsed one can show it. */
+export function withFreshPaths(overlay: FileTreeChangeOverlay, paths: Iterable<string>): FileTreeChangeOverlay {
+  const fresh = new Set<string>();
+  for (const relativePath of paths) {
+    fresh.add(relativePath);
+    for (let cut = relativePath.lastIndexOf("/"); cut > 0; cut = relativePath.lastIndexOf("/", cut - 1)) {
+      fresh.add(relativePath.slice(0, cut));
+    }
+  }
+  return fresh.size === 0 ? overlay : { ...overlay, fresh };
+}
+
+/**
+ * The just-edited mark. A folder carries it only while collapsed — open, its children are on screen
+ * and the edited row itself says it.
+ */
+export function freshRowClass(
+  overlay: FileTreeChangeOverlay,
+  relativePath: string,
+  kind: "file" | "directory",
+  expanded: boolean,
+): string | null {
+  if (!overlay.fresh?.has(relativePath)) return null;
+  return kind === "directory" && expanded ? null : "change-fresh";
 }
 
 /** Spelled out in the row's title so the distinction never rides on color alone. */

@@ -1,4 +1,5 @@
 import type { TerminalSessionView } from "@shared/api-types";
+import type { TerminalStatus } from "@shared/terminal-types";
 import type { GitWorkspaceView, SharedWorktree } from "@shared/worktree-types";
 import { useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { AgentView } from "@shared/agent-types";
@@ -17,6 +18,8 @@ export interface TerminalEventTargets {
   /** 최신 세션 목록. 상태 변화의 이전 값을 읽는다. */
   sessionsRef: MutableRefObject<TerminalSessionView[]>;
   agentsRef: MutableRefObject<AgentView[]>;
+  /** 상태가 바뀔 때마다 한 번. 구독은 한 번뿐이라 늘 최신 콜백을 부른다. */
+  onStatusChange?(previous: TerminalSessionView, status: TerminalStatus, label: string): void;
 }
 
 /**
@@ -37,6 +40,8 @@ export function useTerminalEvents(targets: TerminalEventTargets): void {
     agentsRef,
   } = targets;
   const activityIdRef = useRef(0);
+  const onStatusChangeRef = useRef(targets.onStatusChange);
+  onStatusChangeRef.current = targets.onStatusChange;
 
   useEffect(
     () =>
@@ -78,6 +83,7 @@ export function useTerminalEvents(targets: TerminalEventTargets): void {
           const previous = sessionsRef.current.find((session) => session.id === event.sessionId);
           if (previous && previous.status !== event.status) {
             const peers = sessionsRef.current.filter((session) => session.projectId === previous.projectId);
+            const label = sessionLabel(previous, peers, agentsRef.current);
             setActivityLog((log) =>
               [
                 {
@@ -85,13 +91,14 @@ export function useTerminalEvents(targets: TerminalEventTargets): void {
                   timestamp: new Date().toISOString(),
                   projectId: previous.projectId,
                   sessionId: previous.id,
-                  sessionLabel: sessionLabel(previous, peers, agentsRef.current),
+                  sessionLabel: label,
                   fromStatus: previous.status,
                   toStatus: event.status,
                 },
                 ...log,
               ].slice(0, ACTIVITY_LOG_LIMIT),
             );
+            onStatusChangeRef.current?.(previous, event.status, label);
           }
         }
         setSessions((current) =>

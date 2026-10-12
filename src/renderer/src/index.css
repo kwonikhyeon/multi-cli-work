@@ -71,6 +71,18 @@
   --gh-purple: #a371f7;
   --gh-yellow: #d29922;
   --gh-blue: #58a6ff;
+  /*
+   * Motion scale, mirrored in motion-tokens.ts for motion/react props. Interaction feedback stays
+   * at fast/base; signal is for one-shot "something just happened" fades, which must outlast a glance.
+   */
+  --motion-duration-instant: 80ms;
+  --motion-duration-fast: 120ms;
+  --motion-duration-base: 180ms;
+  --motion-duration-slow: 280ms;
+  --motion-duration-signal: 1600ms;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
 /*
@@ -239,6 +251,27 @@ textarea {
 button:focus-visible {
   outline: 2px solid var(--teal);
   outline-offset: 1px;
+}
+
+/*
+ * Hover, selection and state tints ease in rather than snap. Colour and shadow only — nothing here
+ * touches layout. Kept above the components' own rules so each still owns its full rule body.
+ */
+.icon-button,
+.file-tree-row,
+.project-row,
+.file-tab-row,
+.launcher-button,
+.context-menu button,
+.activity-row {
+  transition-duration: var(--motion-duration-fast);
+  transition-property: background-color, color, border-color, box-shadow, opacity;
+  transition-timing-function: var(--ease-standard);
+}
+
+/* A status change cross-fades the dot instead of swapping its colour. */
+.status-dot {
+  transition: background-color var(--motion-duration-base) var(--ease-standard);
 }
 
 /*
@@ -1963,6 +1996,24 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--blue) 40%, transparent);
 }
 
+/* An agent edit that just landed washes its row (or the collapsed folder hiding it) once. */
+.file-tree-row.change-fresh {
+  animation: tree-fresh-wash var(--motion-duration-signal) var(--ease-out) 1;
+}
+
+@keyframes tree-fresh-wash {
+  from {
+    background-color: color-mix(in srgb, var(--violet) 26%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-tree-row.change-fresh {
+    animation: none;
+    background-color: color-mix(in srgb, var(--violet) 18%, transparent);
+  }
+}
+
 .file-tree-state {
   display: flex;
   align-items: center;
@@ -3358,17 +3409,15 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
  * Only the three statuses that are actually news are here. 진행 중 is teal, which is the focus
  * colour, and 대기/종료 are the resting states — drawing those would make every pane a frame.
  */
-.grid-pane.status-awaiting-input,
-.grid-pane.status-awaiting-approval {
+.grid-pane.status-awaiting-input {
+  --session-accent: var(--violet);
   --status-pulse: pane-status-pulse 2.4s ease-in-out infinite;
 }
 
-.grid-pane.status-awaiting-input {
-  --session-accent: var(--violet);
-}
-
+/* Approval blocks the agent outright, so it beats faster than a turn waiting for its next prompt. */
 .grid-pane.status-awaiting-approval {
   --session-accent: var(--amber);
+  --status-pulse: pane-status-pulse 1.6s ease-in-out infinite;
 }
 
 /* An error is a finished condition, not a wait, so it holds still. */
@@ -3393,6 +3442,46 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
 @keyframes pane-status-pulse {
   50% {
     opacity: 0.4;
+  }
+}
+
+/*
+ * The pane's signal layer: a glow that fades once when a turn ends or the session fails. Working is
+ * already shown by .pane-progress under the header. Opacity only, so the terminal never repaints.
+ */
+.pane-signal {
+  position: absolute;
+  z-index: 1;
+  overflow: hidden;
+  inset: 0;
+  pointer-events: none;
+}
+
+.grid-pane.just-completed {
+  --signal-accent: var(--green);
+}
+
+.grid-pane.just-failed {
+  --signal-accent: var(--red);
+}
+
+.grid-pane.just-completed .pane-signal::after,
+.grid-pane.just-failed .pane-signal::after {
+  position: absolute;
+  border: 2px solid var(--signal-accent);
+  animation: signal-fade var(--motion-duration-signal) var(--ease-out) forwards;
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--signal-accent) 30%, transparent);
+  content: "";
+  inset: 0;
+}
+
+@keyframes signal-fade {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
   }
 }
 
@@ -3890,6 +3979,79 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
 .status-error .status-dot,
 .status-dot.status-error {
   background: var(--red);
+}
+
+/*
+ * Live dots breathe; resting ones (idle, exited, error) hold still. The beat follows urgency:
+ * approval fastest, then work in progress, then a turn waiting for its next prompt. Keyed on the
+ * dot's own class so only a dot drawing a session's current status ever moves.
+ */
+.status-dot.status-starting,
+.status-dot.status-working {
+  animation: status-dot-breathe 1.6s ease-in-out infinite;
+}
+
+.status-dot.status-awaiting-input {
+  animation: status-dot-breathe 2.4s ease-in-out infinite;
+}
+
+.status-dot.status-awaiting-approval {
+  animation: status-dot-breathe 1.2s ease-in-out infinite;
+}
+
+@keyframes status-dot-breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* A row whose session just finished or failed washes once in that colour, and its dot pops. */
+.session-row.just-completed {
+  --signal-accent: var(--green);
+}
+
+.session-row.just-failed {
+  --signal-accent: var(--red);
+}
+
+.session-row.just-completed,
+.session-row.just-failed {
+  animation: row-signal-wash var(--motion-duration-signal) var(--ease-out) 1;
+}
+
+.just-completed .status-dot,
+.just-failed .status-dot {
+  animation: status-dot-pop 420ms var(--ease-out) 1;
+}
+
+@keyframes row-signal-wash {
+  from {
+    background-color: color-mix(in srgb, var(--signal-accent) 24%, transparent);
+  }
+}
+
+@keyframes status-dot-pop {
+  40% {
+    transform: scale(1.8);
+  }
+}
+
+/*
+ * Without motion the marks still have to be seen: they hold as static tints for as long as the
+ * signal lasts, the way .project-row.flash does. Breathing simply stops.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .grid-pane.just-completed .pane-signal::after,
+  .grid-pane.just-failed .pane-signal::after {
+    animation: none;
+    opacity: 0.6;
+  }
+
+  .session-row.just-completed,
+  .session-row.just-failed {
+    animation: none;
+    background-color: color-mix(in srgb, var(--signal-accent) 18%, transparent);
+  }
 }
 
 .registry-warning {
@@ -4491,6 +4653,83 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
 
 .context-menu button.danger-item {
   color: var(--danger-text);
+}
+
+/* Toasts: news about sessions off screen. Above menus (40), below dialogs (50). */
+.toaster {
+  position: fixed;
+  z-index: 45;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 300px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+}
+
+.toast {
+  --toast-accent: var(--teal);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--toast-accent);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 36%);
+  pointer-events: auto;
+}
+
+.toast-success {
+  --toast-accent: var(--green);
+}
+
+.toast-error {
+  --toast-accent: var(--red);
+}
+
+.toast-body {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr);
+  width: 100%;
+  align-items: start;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-duration-fast) var(--ease-standard);
+}
+
+.toast-body:hover {
+  background: var(--surface-hover);
+}
+
+.toast-body > svg {
+  margin-top: 2px;
+  color: var(--toast-accent);
+}
+
+.toast-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.toast-title {
+  overflow: hidden;
+  font: var(--type-ui-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toast-detail {
+  color: var(--muted);
+  font: var(--type-secondary);
 }
 
 .context-menu-separator {

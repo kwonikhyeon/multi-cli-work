@@ -4,7 +4,16 @@ import { ChevronDown, ChevronRight, Eraser, RefreshCw, TriangleAlert } from "luc
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { FileIcon, FolderIcon } from "./file-icons";
 import { fileExtensionOf } from "./file-tabs";
-import { buildChangeOverlay, changeOriginLabel, changeRowClass, type FileTreeChangeOverlay } from "./file-tree-changes";
+import {
+  buildChangeOverlay,
+  changeOriginLabel,
+  changeRowClass,
+  freshAgentPaths,
+  freshRowClass,
+  withFreshPaths,
+  type FileTreeChangeOverlay,
+} from "./file-tree-changes";
+import { useTransientSet } from "./use-transient-set";
 import { buildGitOverlay, gitRowClass, type FileTreeGitOverlay } from "./file-tree-git";
 import { FileTreeContextMenu, type FileTreeCopyKind } from "./FileTreeContextMenu";
 import { errorMessage } from "./ipc-error";
@@ -67,6 +76,8 @@ function isAtOrBelow(relativePath: string, root: string): boolean {
 
 /** Pixels one level of nesting adds. Rows read it as padding, the guide line as its x position. */
 const INDENT_STEP = 14;
+/** How long a just-edited row stays marked; the wash itself fades over --motion-duration-signal. */
+const FRESH_EDIT_MS = 2500;
 
 /**
  * The inline field used for both renaming and creating. It wears the row's own class so the caret
@@ -228,6 +239,7 @@ function TreeNode({
     menuTargetPath === entry.relativePath ? "menu-target" : "",
     gitRowClass(git, entry.relativePath, entry.kind) ?? "",
     changeRowClass(changes, entry.relativePath, entry.kind) ?? "",
+    freshRowClass(changes, entry.relativePath, entry.kind, expanded) ?? "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -318,7 +330,14 @@ export function FileExplorer({
   const git = useMemo(() => buildGitOverlay(gitData), [gitData]);
   // `local` status is read straight off `childrenByDir`'s own mtimeMs, so it recomputes for free
   // whenever a directory listing reloads — only `changedPaths` (agentPaths/baselineMs) needs its own fetch.
-  const changes = useMemo(() => buildChangeOverlay(changedPaths, childrenByDir), [changedPaths, childrenByDir]);
+  /** Agent edits that landed since the previous read; their rows wash once and settle. */
+  const freshEdits = useTransientSet<string, true>(FRESH_EDIT_MS);
+  /** The read `freshEdits` is measured against. Cleared with the target, so a switch flashes nothing. */
+  const lastChangedPaths = useRef<WorkspaceChangedPaths | null>(null);
+  const changes = useMemo(
+    () => withFreshPaths(buildChangeOverlay(changedPaths, childrenByDir), freshEdits.map.keys()),
+    [changedPaths, childrenByDir, freshEdits.map],
+  );
 
   const loadDirectory = (loadTarget: FileExplorerTarget, relativePath: string) => {
     const loadTargetKey = targetKey(loadTarget);
@@ -357,8 +376,15 @@ export function FileExplorer({
   const loadChanges = (loadTarget: FileExplorerTarget) => {
     window.multiCliWork.workspaceFiles
       .changedPaths(loadTarget)
-      .then(setChangedPaths)
-      .catch(() => setChangedPaths(null));
+      .then((next) => {
+        for (const relativePath of freshAgentPaths(lastChangedPaths.current, next)) freshEdits.flash(relativePath, true);
+        lastChangedPaths.current = next;
+        setChangedPaths(next);
+      })
+      .catch(() => {
+        lastChangedPaths.current = null;
+        setChangedPaths(null);
+      });
   };
 
   const loadTree = (loadTarget: FileExplorerTarget) => {
@@ -374,6 +400,7 @@ export function FileExplorer({
     setChildrenByDir({});
     setGitData(null);
     setChangedPaths(null);
+    lastChangedPaths.current = null;
     setMenu(null);
     setEditing(null);
     setDeleteRequest(null);

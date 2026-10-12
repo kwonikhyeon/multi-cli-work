@@ -1,6 +1,14 @@
 import type { FileTreeEntry, WorkspaceChangedPaths } from "@shared/file-explorer-types";
 import { describe, expect, it } from "vitest";
-import { buildChangeOverlay, changeOriginLabel, changeRowClass, EMPTY_CHANGE_OVERLAY } from "./file-tree-changes";
+import {
+  buildChangeOverlay,
+  changeOriginLabel,
+  changeRowClass,
+  EMPTY_CHANGE_OVERLAY,
+  freshAgentPaths,
+  freshRowClass,
+  withFreshPaths,
+} from "./file-tree-changes";
 
 function changed(overrides: Partial<WorkspaceChangedPaths>): WorkspaceChangedPaths {
   return { agentPaths: [], baselineMs: 0, ...overrides };
@@ -122,5 +130,38 @@ describe("changeOriginLabel", () => {
   it("spells out each origin so the distinction never rides on color alone", () => {
     expect(changeOriginLabel("agent")).toBe("에이전트가 수정함");
     expect(changeOriginLabel("local")).toBe("세션 중 수정됨");
+  });
+});
+
+describe("freshAgentPaths", () => {
+  const edit = (relativePath: string, at: number) => ({ relativePath, kind: "file" as const, at });
+
+  it("reports nothing without an earlier read to compare against", () => {
+    expect(freshAgentPaths(null, changed({ agentPaths: [edit("a.ts", 5)] }))).toEqual([]);
+  });
+
+  it("reports paths that are new and paths edited again since the last read", () => {
+    const previous = changed({ agentPaths: [edit("a.ts", 5), edit("b.ts", 5)] });
+    const next = changed({ agentPaths: [edit("a.ts", 5), edit("b.ts", 9), edit("c.ts", 9)] });
+    expect(freshAgentPaths(previous, next)).toEqual(["b.ts", "c.ts"]);
+  });
+});
+
+describe("fresh rows", () => {
+  it("marks a fresh file and every folder above it", () => {
+    const overlay = withFreshPaths(EMPTY_CHANGE_OVERLAY, ["src/app/main.ts"]);
+    expect([...(overlay.fresh ?? [])].sort()).toEqual(["src", "src/app", "src/app/main.ts"]);
+  });
+
+  it("returns the overlay untouched when nothing is fresh", () => {
+    expect(withFreshPaths(EMPTY_CHANGE_OVERLAY, [])).toBe(EMPTY_CHANGE_OVERLAY);
+  });
+
+  it("marks a folder only while it is collapsed", () => {
+    const overlay = withFreshPaths(EMPTY_CHANGE_OVERLAY, ["src/main.ts"]);
+    expect(freshRowClass(overlay, "src/main.ts", "file", false)).toBe("change-fresh");
+    expect(freshRowClass(overlay, "src", "directory", false)).toBe("change-fresh");
+    expect(freshRowClass(overlay, "src", "directory", true)).toBeNull();
+    expect(freshRowClass(overlay, "docs", "directory", false)).toBeNull();
   });
 });

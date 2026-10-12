@@ -43,6 +43,9 @@ import { localDiffNotesPrompt } from "@shared/line-notes";
 import type { QuickOpenItem } from "./quick-open";
 import { projectName, sessionLabel } from "./session-labels";
 import { neighbourSlot, resolveLayout, type FocusDirection } from "./grid-layouts";
+import { SESSION_SIGNAL_MS, SessionSignalsContext, sessionSignalFor, type SessionSignal } from "./session-signals";
+import { showToast, Toaster } from "./toast";
+import { useTransientSet } from "./use-transient-set";
 import { paneContextOf, paneContextOfOwner, type PaneContext } from "./pane-context";
 import { recentProjects } from "./recent-folders";
 import { buildSessionPanelItems, type SessionScopeTarget } from "./session-panel";
@@ -214,6 +217,13 @@ export function App() {
   /** The folder a tab click just pointed at; the sidebar pulses it for three seconds. */
   const [flashProjectId, setFlashProjectId] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Sessions that just finished or failed; their pane and rows glow once and settle. */
+  const sessionSignals = useTransientSet<string, SessionSignal>(SESSION_SIGNAL_MS);
+  /**
+   * When each session last went to work, so a completion can tell a real turn from a flicker. A
+   * session already working when the app loaded has no entry and counts as a long turn.
+   */
+  const workingSince = useRef(new Map<string, number>());
   /** Set once the first load has published its arrangements, so an empty grid is never saved over. */
   const slotViewsRestored = useRef(false);
   const publishedSessionIds = useRef<string | null>(null);
@@ -459,6 +469,9 @@ export function App() {
     () => resolvedView.slots.filter((id): id is string => id !== null && !isDocumentPaneId(id)),
     [resolvedView],
   );
+  /** Terminal events subscribe once, so they read what is on screen through a ref. */
+  const visibleSessionIdsRef = useRef(visibleSessionIds);
+  visibleSessionIdsRef.current = visibleSessionIds;
 
   const refreshAgents = useCallback(async () => {
     const snapshot = await window.multiCliWork.agents.list();
@@ -709,6 +722,24 @@ export function App() {
     setActivityLog,
     sessionsRef,
     agentsRef,
+    onStatusChange: (previous, status, label) => {
+      const now = Date.now();
+      const workedMs = now - (workingSince.current.get(previous.id) ?? 0);
+      if (status === "working") workingSince.current.set(previous.id, now);
+      else workingSince.current.delete(previous.id);
+      const signal = sessionSignalFor(previous.status, status, workedMs);
+      if (!signal) return;
+      sessionSignals.flash(previous.id, signal);
+      // A pane on screen already glows; a toast is for the session the user cannot see.
+      if (!visibleSessionIdsRef.current.includes(previous.id)) {
+        showToast({
+          tone: signal === "completed" ? "success" : "error",
+          title: label,
+          detail: signal === "completed" ? "작업을 마쳤습니다" : "오류로 멈췄습니다",
+          onSelect: () => revealSessionRef.current(previous),
+        });
+      }
+    },
   });
 
   const persistSelection = useCallback((projectId: string | null, sessionId: string | null) => {
@@ -1961,6 +1992,7 @@ export function App() {
   };
 
   return (
+    <SessionSignalsContext.Provider value={sessionSignals.map}>
     <div className="app-frame">
       <TitleBar
         menus={titleBarMenus}
@@ -2656,6 +2688,8 @@ export function App() {
         />
       ) : null}
     </div>
+    <Toaster />
     </div>
+    </SessionSignalsContext.Provider>
   );
 }

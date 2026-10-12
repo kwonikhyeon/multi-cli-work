@@ -5,8 +5,10 @@ import type { ProjectCategorySetting } from "@shared/settings-types";
 import type { SessionIndicators, SessionProgress, TerminalKind, TerminalStatus, ToolCommand } from "@shared/terminal-types";
 import type { WorkProject, WorkProjectRole } from "@shared/work-project-types";
 import { Briefcase, Clock, Info, Wrench } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { AgentIcon, GitHubIcon, agentAccentClass } from "./brand-icons";
+import { motionDuration, motionEase } from "./motion-tokens";
 import { SessionChips } from "./SessionChips";
 import { recentProjects } from "./recent-folders";
 import { TagChips } from "./TagChips";
@@ -289,6 +291,8 @@ export function HomeDashboard({
             <p className="home-empty">아직 이 세션에 활동이 없습니다</p>
           ) : (
             <ul className="activity-feed">
+              {/* New entries drop in at the top; the ones already on screen at load just sit there. */}
+              <AnimatePresence initial={false}>
               {activityLog.map((entry) => {
                 const session = sessions.find((candidate) => candidate.id === entry.sessionId);
                 const label = session
@@ -299,7 +303,13 @@ export function HomeDashboard({
                     )
                   : entry.sessionLabel;
                 return (
-                  <li key={entry.id}>
+                  <motion.li
+                    key={entry.id}
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: motionDuration.base, ease: motionEase.out }}
+                  >
                     <button
                       type="button"
                       className={`activity-row status-${entry.toStatus}`}
@@ -316,9 +326,10 @@ export function HomeDashboard({
                       </span>
                       <span className="activity-time">{relativeTime(entry.timestamp)}</span>
                     </button>
-                  </li>
+                  </motion.li>
                 );
               })}
+              </AnimatePresence>
             </ul>
           )}
         </section>

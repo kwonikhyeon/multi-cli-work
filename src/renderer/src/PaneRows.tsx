@@ -6,6 +6,7 @@ import { SessionNameInput } from "./SessionNameInput";
 import { AgentIcon } from "./brand-icons";
 import { DocumentPaneIcon, paneRowClassOf, type DocumentPane } from "./pane-items";
 import { statusLabels } from "./session-labels";
+import { useSessionSignalClass } from "./session-signals";
 
 /**
  * 패인 한 줄 — 세션이거나 문서다. 트리(폴더·worktree 아래)와 상단 세션 패널이 같은 줄을 그리므로
@@ -104,6 +105,7 @@ export function SessionRow({
   dropProps,
   trailing,
 }: SessionRowProps) {
+  const signalClass = useSessionSignalClass(session.id);
   // 이름을 고치는 동안에는 행 자체가 입력칸이 된다 — 열기 버튼이 남아 있으면 첫 글자를 누르다
   // 세션이 열린다.
   if (renaming) {
@@ -116,7 +118,7 @@ export function SessionRow({
   return (
     <li>
       <div
-        className={paneRowClassOf(current, onScreen, "file-tab-row", `status-${session.status}`, dropClass ?? "")}
+        className={paneRowClassOf(current, onScreen, "file-tab-row", `status-${session.status}`, signalClass, dropClass ?? "")}
         {...dragProps}
         {...dropProps}
       >

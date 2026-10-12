@@ -4,7 +4,7 @@ import type { TerminalSessionView } from "@shared/api-types";
 import type { TerminalSettings } from "@shared/settings-types";
 import type { SessionIndicators } from "@shared/terminal-types";
 import { Plus, X } from "lucide-react";
-import { useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useContext, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { canSplitColumn, columnOfSlot, type GridLayout } from "./grid-layouts";
 import type { PaneContext } from "./pane-context";
 import { DocumentPaneIcon, paneContentId, type PaneContent } from "./pane-items";
@@ -12,6 +12,7 @@ import { ColumnSplitButton, PaneContextLine, PaneHeader, type ColumnSplitControl
 import { TerminalPane, type TerminalCommands } from "./TerminalPane";
 import { isSessionDrag, readSessionDrag, startSessionDrag } from "./session-drag";
 import { sessionLabel } from "./session-labels";
+import { SessionSignalsContext, signalClassOf } from "./session-signals";
 import { resolveSnapZone, type SnapZone } from "./snap-zones";
 import type { FileLinkPosition, ResolvedFileLink } from "./terminal-link-provider";
 
@@ -140,6 +141,7 @@ export function WorkspaceGrid({
   const zoomed = zoomedIndex !== -1;
   const parked = (index: number) => zoomed && index !== zoomedIndex;
   const [snapZone, setSnapZone] = useState<SnapZone | null>(null);
+  const sessionSignals = useContext(SessionSignalsContext);
   const shiftEnterBytes = (pane: TerminalSessionView): string | null =>
     SHIFT_ENTER_BYTES[agents.find((agent) => agent.id === pane.kind)?.shiftEnter ?? "enter"];
   const labelFor = (pane: TerminalSessionView): string =>
@@ -333,7 +335,7 @@ export function WorkspaceGrid({
           <section
             key={paneId}
             {...slotProps(index)}
-            className={paneClass(paneId, index, `status-${session.status}`)}
+            className={paneClass(paneId, index, `status-${session.status} ${signalClassOf(sessionSignals, session.id)}`.trim())}
             aria-label={labelFor(session)}
             onMouseDownCapture={() => {
               if (paneId !== focusedPaneId) onFocusPane(paneId);
@@ -376,6 +378,9 @@ export function WorkspaceGrid({
               onTerminalFocused={onTerminalFocused}
               onOpenFileLink={(link, position) => onOpenFileLink?.(session.id, link, position)}
             />
+            {/* The working bar and the completion glow. ::before and ::after already carry the
+                status frame and the focus ring, so the signal gets an element of its own. */}
+            <span className="pane-signal" aria-hidden="true" />
           </section>
         );
       })}
