@@ -29,8 +29,8 @@ interface WorkspaceHeaderProps {
   layout: { layoutId: string; paneCount: number; onSelect(layoutId: string): void } | null;
   /**
    * Which page of the arrangement is showing. Panes that do not fit the layout paginate rather than
-   * disappear, so this row is the way back to them — it rides beside the picker that decides how
-   * many fit in the first place. Each page is a tab naming the panes it holds, with the sidebar's
+   * disappear, so this row is the way back to them — it rides beside the workspace name.
+   * Each page is a tab naming the panes it holds, with the sidebar's
    * waiting dot when one of them wants the user, so the page worth turning to says so itself.
    */
   pages: {
@@ -134,37 +134,33 @@ export function WorkspaceHeader({
 
   return (
     <header className="workspace-header">
-      <div className="workspace-identity">
-        {/* The two shelves take different icons: with the same title bar for both, the mark is what
-            says at a glance which of them is on screen. */}
-        {workspace?.kind === "hidden" ? (
-          <EyeOff size={16} aria-hidden="true" />
-        ) : workspace ? (
-          <LayoutGrid size={16} aria-hidden="true" />
-        ) : (
-          <MonitorDot size={16} aria-hidden="true" />
-        )}
-        <div className="workspace-copy">
-          <span className="workspace-title">
-            {title}
-            {!workspace && selectedSession ? (
-              <>
-                <span className="breadcrumb-separator">/</span>
-                {selectedSessionLabel}
-              </>
-            ) : null}
-          </span>
-          <span className="workspace-path" title={subtitle}>
-            {subtitle}
-          </span>
+      <div className="workspace-heading">
+        <div className="workspace-identity">
+          {/* The two shelves take different icons: with the same title bar for both, the mark is what
+              says at a glance which of them is on screen. */}
+          {workspace?.kind === "hidden" ? (
+            <EyeOff size={16} aria-hidden="true" />
+          ) : workspace ? (
+            <LayoutGrid size={16} aria-hidden="true" />
+          ) : (
+            <MonitorDot size={16} aria-hidden="true" />
+          )}
+          <div className="workspace-copy">
+            <span className="workspace-title">
+              {title}
+              {!workspace && selectedSession ? (
+                <>
+                  <span className="breadcrumb-separator">/</span>
+                  {selectedSessionLabel}
+                </>
+              ) : null}
+            </span>
+            <span className="workspace-path" title={subtitle}>
+              {subtitle}
+            </span>
+          </div>
         </div>
-      </div>
 
-      <div className="workspace-actions">
-        {/* A shelf hides the folder controls, so on that surface the picker is the whole row. */}
-        {layout ? (
-          <LayoutPicker layoutId={layout.layoutId} paneCount={layout.paneCount} onSelect={layout.onSelect} />
-        ) : null}
         {pages && pages.items.length > 1 ? (
           <div
             className="workspace-page-tabs"
@@ -197,6 +193,12 @@ export function WorkspaceHeader({
               );
             })}
           </div>
+        ) : null}
+      </div>
+
+      <div className="workspace-actions">
+        {layout ? (
+          <LayoutPicker layoutId={layout.layoutId} paneCount={layout.paneCount} onSelect={layout.onSelect} />
         ) : null}
         {refreshAll ? (
           <button

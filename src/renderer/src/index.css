@@ -3578,11 +3578,11 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
 
 /*
  * Panes past the layout's capacity paginate instead of disappearing, so this row rides beside the
- * picker that decides the capacity. Each page is a tab that names what it holds — a page the user
+ * workspace name. Each page is a tab that names what it holds — a page the user
  * cannot see is otherwise a page they forget. The strip may shrink, never wrap: a tab gives up its
  * names before its number, so even a crowded header keeps every page one click away.
  */
-/* The outsized shrink factor makes the tabs give up width before the launchers beside them do —
+/* The outsized shrink factor makes the tabs give up width before the controls do —
    a tab without its names is still a tab, a launcher scrolled out of view is gone. The floor is
    every tab at its number alone: without it the strip shrank to nothing on a narrow header and
    took every page with it. */
@@ -3594,7 +3594,6 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
   min-width: calc(var(--page-tab-count) * var(--page-tab-min) + (var(--page-tab-count) - 1) * 3px);
   align-items: center;
   gap: 3px;
-  margin-right: 6px;
 }
 
 .workspace-page-tab {
@@ -4379,12 +4378,19 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
   container-type: inline-size;
 }
 
-/* Basis 0: the title takes what the controls leave, not the other way round. With an auto basis
-   both sides shrank in proportion and the launcher row — the only flexible control — got crushed. */
+.workspace-heading {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Keep the tabs next to the name; spare width belongs between this group and the controls. */
 .workspace-identity {
   display: flex;
-  flex: 1 1 0;
-  min-width: 96px;
+  flex: 0 1 auto;
+  min-width: 0;
   align-items: center;
   gap: 9px;
   color: var(--muted);
