@@ -268,6 +268,12 @@ const agentFixtures: AgentView[] = [
   { ...agentFixture("codex", "Codex", false), shiftEnter: "alt-enter" },
 ];
 
+/** An explorer row opens with the OS by default; the in-app viewer is behind its context menu. */
+async function openFileInApp(name: string) {
+  fireEvent.contextMenu(await screen.findByRole("button", { name }), { clientX: 12, clientY: 20 });
+  fireEvent.click(await screen.findByRole("menuitem", { name: "앱에서 열기" }));
+}
+
 function createApi(options?: {
   projects?: SharedProject[];
   sessions?: TerminalSessionView[];
@@ -1053,7 +1059,7 @@ describe("folder workspace", () => {
     await waitFor(() => expect(harness.api.projects.gitStatus).toHaveBeenCalledWith(atlas.id));
     expect(await screen.findByText("main")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "파일 탐색기에서 열기" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "바로가기" })).getByRole("button", { name: "파일 탐색기에서 열기" }));
     await waitFor(() => expect(harness.api.projects.reveal).toHaveBeenCalledWith(atlas.id));
   });
 
@@ -2373,6 +2379,27 @@ describe("file viewer", () => {
     mtimeMs: 0,
   };
 
+  it("opens an explorer file with its associated program on a double click, not a single click", async () => {
+    const harness = createApi({ sessions: [] });
+    vi.mocked(harness.api.workspaceFiles.listDirectory).mockResolvedValue([markdownEntry]);
+    window.multiCliWork = harness.api;
+    render(<App />);
+
+    const row = await screen.findByRole("button", { name: "README.md" });
+    fireEvent.click(row);
+    expect(harness.api.workspaceFiles.openEntry).not.toHaveBeenCalled();
+
+    fireEvent.doubleClick(row);
+    await waitFor(() =>
+      expect(harness.api.workspaceFiles.openEntry).toHaveBeenCalledWith(
+        { kind: "project", id: atlas.id },
+        "README.md",
+        { confirmedRun: false },
+      ),
+    );
+    expect(harness.api.workspaceFiles.readFile).not.toHaveBeenCalled();
+  });
+
   it("serializes rapid Markdown task saves and keeps a failed optimistic change retryable", async () => {
     const harness = createApi({ sessions: [] });
     vi.mocked(harness.api.workspaceFiles.listDirectory).mockResolvedValue([markdownEntry]);
@@ -2390,7 +2417,7 @@ describe("file viewer", () => {
     window.multiCliWork = harness.api;
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "README.md" }));
+    await openFileInApp("README.md");
     const first = (await screen.findAllByRole("checkbox"))[0];
     fireEvent.click(first);
     await waitFor(() => expect(writes).toHaveLength(1));
@@ -2430,7 +2457,7 @@ describe("file viewer", () => {
     window.multiCliWork = harness.api;
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "README.md" }));
+    await openFileInApp("README.md");
     fireEvent.click(await screen.findByRole("link", { name: "Guide" }));
     expect(await screen.findByRole("heading", { name: "Guide title" })).toBeInTheDocument();
     expect(harness.api.workspaceFiles.readFile).toHaveBeenLastCalledWith(
@@ -2463,7 +2490,7 @@ describe("file viewer", () => {
     window.multiCliWork = harness.api;
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "README.md" }));
+    await openFileInApp("README.md");
     // 패널 행은 `패인 열기`다 — 같은 문서가 트리에도 `문서 열기`로 서므로 이름이 갈린다(R8).
     const row = await screen.findByRole("button", { name: "README.md 패인 열기" });
     expect(row.closest(".session-panel")).not.toBeNull();
@@ -2494,7 +2521,7 @@ describe("file viewer", () => {
     window.multiCliWork = harness.api;
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "README.md" }));
+    await openFileInApp("README.md");
     const row = await screen.findByRole("button", { name: "README.md 문서 열기" });
     expect(row.closest(".session-tree")).toBeTruthy();
     expect(
@@ -2528,7 +2555,7 @@ describe("file viewer", () => {
     window.multiCliWork = harness.api;
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "README.md" }));
+    await openFileInApp("README.md");
     await screen.findByRole("button", { name: "README.md 문서 열기" });
 
     fireEvent.contextMenu(screen.getByRole("button", { name: "README.md" }), { clientX: 8, clientY: 8 });
@@ -2555,7 +2582,7 @@ describe("file viewer", () => {
     window.multiCliWork = harness.api;
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "README.md" }));
+    await openFileInApp("README.md");
     await screen.findByRole("button", { name: "README.md 문서 열기" });
 
     fireEvent.contextMenu(screen.getByRole("button", { name: "README.md" }), { clientX: 8, clientY: 8 });
@@ -2592,7 +2619,7 @@ describe("file viewer", () => {
     window.multiCliWork = harness.api;
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "notes.txt" }));
+    await openFileInApp("notes.txt");
     fireEvent.change(await screen.findByRole("textbox", { name: "notes.txt 편집" }), { target: { value: "new" } });
     const save = screen.getByRole("button", { name: "저장" });
     expect(save).toBeEnabled();
@@ -3596,7 +3623,7 @@ describe("sidebar panes", () => {
     window.multiCliWork = harness.api;
     const { container } = render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "README.md" }));
+    await openFileInApp("README.md");
     await screen.findByRole("button", { name: "README.md 패인 열기" });
     await screen.findByRole("button", { name: "세션 작업공간 열기 (패인 2개)" });
     fireEvent.click(screen.getByRole("button", { name: "숨김 펼치기" }));

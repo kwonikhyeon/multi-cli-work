@@ -17,6 +17,7 @@ import {
   TERMINAL_FONT_SIZE_RANGE,
   TERMINAL_LINE_HEIGHT_RANGE,
   TERMINAL_SCROLLBACK_RANGE,
+  isFileOpenTarget,
   type AppSettingsPatch,
   type FileOpenTarget,
   type NotifiableStatus,
@@ -446,8 +447,12 @@ export function validateSettingsPatch(value: unknown): AppSettingsPatch {
     }
   }
   if (raw.files !== undefined) {
-    const files = exactObject(raw.files, ["openWith", "unsupportedOpensWithOs"], "Settings files");
+    const files = exactObject(raw.files, ["defaultOpenWith", "openWith", "unsupportedOpensWithOs"], "Settings files");
     patch.files = {};
+    if (files.defaultOpenWith !== undefined) {
+      if (!isFileOpenTarget(files.defaultOpenWith)) throw new Error("Settings files.defaultOpenWith is invalid");
+      patch.files.defaultOpenWith = files.defaultOpenWith;
+    }
     if (files.openWith !== undefined) {
       if (typeof files.openWith !== "object" || files.openWith === null || Array.isArray(files.openWith)) {
         throw new Error("Settings files.openWith must be an object");

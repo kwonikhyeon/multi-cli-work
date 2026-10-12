@@ -355,16 +355,24 @@ describe("파일 탭", () => {
     fireEvent.click(screen.getByRole("button", { name: "파일" }));
   }
 
+  it("기본 열기는 연결 프로그램에서 시작하고, 바꾸면 부분 패치로 저장된다", async () => {
+    openFiles();
+    const select = screen.getByLabelText("기본 열기");
+    expect(select).toHaveValue("os");
+    fireEvent.change(select, { target: { value: "in-app" } });
+    await waitFor(() => expect(update).toHaveBeenCalledWith({ files: { defaultOpenWith: "in-app" } }));
+  });
+
   it("미지원 파일 자동 전환 토글이 부분 패치로 저장된다", async () => {
     openFiles();
-    fireEvent.click(screen.getByLabelText("미리보기를 지원하지 않는 파일은 연결 프로그램으로 열기"));
+    fireEvent.click(screen.getByLabelText("인앱으로 열 때 미리보기를 지원하지 않는 파일은 연결 프로그램으로 열기"));
     await waitFor(() =>
       expect(update).toHaveBeenCalledWith({ files: { unsupportedOpensWithOs: false } }),
     );
   });
 
   it("확장자를 추가하면 기존 맵에 더해 통째로 저장한다", async () => {
-    openFiles({ ...DEFAULT_SETTINGS, files: { openWith: { md: "os" }, unsupportedOpensWithOs: true } });
+    openFiles({ ...DEFAULT_SETTINGS, files: { defaultOpenWith: "os", openWith: { md: "os" }, unsupportedOpensWithOs: true } });
     fireEvent.change(screen.getByPlaceholderText("예: pdf"), { target: { value: "PDF" } });
     fireEvent.click(screen.getByRole("button", { name: "추가" }));
     await waitFor(() =>
@@ -379,7 +387,7 @@ describe("파일 탭", () => {
   });
 
   it("기존 확장자의 동작을 바꾸거나 삭제할 수 있다", async () => {
-    openFiles({ ...DEFAULT_SETTINGS, files: { openWith: { md: "os" }, unsupportedOpensWithOs: true } });
+    openFiles({ ...DEFAULT_SETTINGS, files: { defaultOpenWith: "os", openWith: { md: "os" }, unsupportedOpensWithOs: true } });
     fireEvent.change(screen.getByLabelText(".md 여는 방법"), { target: { value: "vscode" } });
     await waitFor(() => expect(update).toHaveBeenCalledWith({ files: { openWith: { md: "vscode" } } }));
 

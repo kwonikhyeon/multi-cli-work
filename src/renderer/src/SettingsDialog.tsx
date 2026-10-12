@@ -881,10 +881,24 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
             <>
               <h2>파일</h2>
               <p className="settings-hint">
-                우측 사이드바에서 파일을 여는 방법입니다. 확장자별로 지정하지 않으면 인앱 판정을 따릅니다.
+                우측 사이드바에서 파일을 더블클릭하거나 터미널의 경로를 Ctrl+클릭할 때 여는 방법입니다. 확장자별 지정이 우선합니다.
               </p>
+              <div className="settings-row">
+                <label htmlFor="settings-default-open-with">기본 열기</label>
+                <select
+                  id="settings-default-open-with"
+                  value={settings.files.defaultOpenWith}
+                  onChange={(event) => update({ files: { defaultOpenWith: event.target.value as FileOpenTarget } })}
+                >
+                  {(Object.keys(FILE_OPEN_TARGET_LABELS) as FileOpenTarget[]).map((option) => (
+                    <option key={option} value={option}>
+                      {FILE_OPEN_TARGET_LABELS[option]}
+                    </option>
+                  ))}
+                </select>
+              </div>
               {checkboxRow(
-                "미리보기를 지원하지 않는 파일은 연결 프로그램으로 열기",
+                "인앱으로 열 때 미리보기를 지원하지 않는 파일은 연결 프로그램으로 열기",
                 "settings-unsupported-opens-with-os",
                 settings.files.unsupportedOpensWithOs,
                 (next) => ({ files: { unsupportedOpensWithOs: next } }),

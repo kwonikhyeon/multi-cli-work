@@ -66,10 +66,25 @@ export interface ProjectSettings {
 export type FileOpenTarget = "in-app" | "os" | "vscode";
 
 export interface FileSettings {
-  /** 확장자(소문자, 점 없음) → 기본 열기 대상. 없으면 인앱 판정을 따른다. */
+  /** 확장자별 지정이 없을 때 탐색기·터미널 링크가 파일을 여는 곳. */
+  defaultOpenWith: FileOpenTarget;
+  /** 확장자(소문자, 점 없음) → 기본 열기 대상. 없으면 `defaultOpenWith`를 따른다. */
   openWith: Record<string, FileOpenTarget>;
-  /** 인앱 미리보기가 불가능한 파일을 OS 연결 프로그램으로 넘긴다. */
+  /** 인앱으로 열 때 미리보기가 불가능한 파일을 OS 연결 프로그램으로 넘긴다. */
   unsupportedOpensWithOs: boolean;
+}
+
+export function isFileOpenTarget(value: unknown): value is FileOpenTarget {
+  return value === "in-app" || value === "os" || value === "vscode";
+}
+
+/** 확장자별 지정이 우선하고, 없으면 `fallback`(기본: 설정의 기본 열기 대상)을 쓴다. */
+export function resolveFileOpenTarget(
+  files: FileSettings,
+  extension: string | null | undefined,
+  fallback: FileOpenTarget = files.defaultOpenWith,
+): FileOpenTarget {
+  return files.openWith[extension ?? ""] ?? fallback;
 }
 
 /** 팬아웃 대화상자에서 다시 불러 쓰는 프롬프트 한 벌. */
@@ -141,7 +156,7 @@ export interface AppSettingsPatch {
   /** categories는 통째 교체 — 삭제·순서 변경은 부분 병합으로 표현할 수 없다. */
   projects?: { categories?: ProjectCategorySetting[]; defaultCategory?: string };
   /** `openWith`은 전체 교체 — keybindings와 같은 이유로, 부분 병합이면 항목 삭제가 불가능하다. */
-  files?: { openWith?: Record<string, FileOpenTarget>; unsupportedOpensWithOs?: boolean };
+  files?: { defaultOpenWith?: FileOpenTarget; openWith?: Record<string, FileOpenTarget>; unsupportedOpensWithOs?: boolean };
   /** 템플릿 목록은 통째 교체 — 삭제·순서 변경을 부분 병합으로 표현할 수 없다. */
   fanOut?: { templates?: FanOutTemplate[] };
   appearance?: Partial<AppearanceSettings>;
@@ -185,7 +200,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   keybindings: {},
   projects: { categories: [...DEFAULT_PROJECT_CATEGORIES], defaultCategory: "기타" },
-  files: { openWith: {}, unsupportedOpensWithOs: true },
+  files: { defaultOpenWith: "os", openWith: {}, unsupportedOpensWithOs: true },
   fanOut: { templates: [] },
   appearance: { theme: "dark" },
   remote: { enabled: false, port: DEFAULT_REMOTE_PORT },
@@ -321,8 +336,7 @@ export function parseSettings(value: unknown): AppSettings {
     for (const [extension, target] of Object.entries(files.openWith)) {
       if (Object.keys(openWith).length >= MAX_FILE_OPEN_WITH_ENTRIES) break;
       const validKey = FILE_OPEN_WITH_EXTENSION_PATTERN.test(extension);
-      const validTarget = target === "in-app" || target === "os" || target === "vscode";
-      if (validKey && validTarget) openWith[extension] = target;
+      if (validKey && isFileOpenTarget(target)) openWith[extension] = target;
     }
   }
 
@@ -394,6 +408,7 @@ export function parseSettings(value: unknown): AppSettings {
     keybindings,
     projects: readProjectSettings(raw.projects, defaults.projects),
     files: {
+      defaultOpenWith: isFileOpenTarget(files.defaultOpenWith) ? files.defaultOpenWith : defaults.files.defaultOpenWith,
       openWith,
       unsupportedOpensWithOs: readBoolean(files.unsupportedOpensWithOs, defaults.files.unsupportedOpensWithOs),
     },
@@ -445,6 +460,7 @@ export function mergeSettingsPatch(current: AppSettings, patch: AppSettingsPatch
     keybindings: patch.keybindings ?? current.keybindings,
     projects: { ...current.projects, ...patch.projects },
     files: {
+      defaultOpenWith: patch.files?.defaultOpenWith ?? current.files.defaultOpenWith,
       openWith: patch.files?.openWith ?? current.files.openWith,
       unsupportedOpensWithOs: patch.files?.unsupportedOpensWithOs ?? current.files.unsupportedOpensWithOs,
     },

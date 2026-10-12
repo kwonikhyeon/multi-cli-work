@@ -11,6 +11,7 @@ import {
   Files,
   FolderOpen,
   FolderPlus,
+  PanelTop,
   Pencil,
   Trash2,
   Type,
@@ -27,7 +28,10 @@ export interface FileTreeContextMenuProps {
   x: number;
   y: number;
   vscodeAvailable: boolean;
+  /** Opens the file the way a double-click does — the settings' default for its extension. */
   onOpen(): void;
+  /** Opens the file in an in-app document pane, whatever the settings' default is. */
+  onOpenInApp(): void;
   /** Opens the file with its OS-associated program, same as a double-click in the file explorer. */
   onOpenExternal(): void;
   onToggle(): void;
@@ -48,6 +52,7 @@ export function FileTreeContextMenu({
   y,
   vscodeAvailable,
   onOpen,
+  onOpenInApp,
   onOpenExternal,
   onToggle,
   onCreate,
@@ -98,6 +103,10 @@ export function FileTreeContextMenu({
           <button type="button" role="menuitem" onClick={run(onOpen)}>
             <FileText size={15} />
             <span>열기</span>
+          </button>
+          <button type="button" role="menuitem" onClick={run(onOpenInApp)}>
+            <PanelTop size={15} />
+            <span>앱에서 열기</span>
           </button>
           <button type="button" role="menuitem" onClick={run(onOpenExternal)}>
             <ExternalLink size={15} />

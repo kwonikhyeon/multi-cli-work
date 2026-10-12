@@ -5,6 +5,7 @@ import {
   mergeSettingsPatch,
   notificationsMuted,
   parseSettings,
+  resolveFileOpenTarget,
 } from "./settings-types";
 
 describe("parseSettings", () => {
@@ -41,7 +42,7 @@ describe("parseSettings", () => {
     });
     expect(DEFAULT_SETTINGS.language).toBe("ko");
     expect(DEFAULT_SETTINGS.keybindings).toEqual({});
-    expect(DEFAULT_SETTINGS.files).toEqual({ openWith: {}, unsupportedOpensWithOs: true });
+    expect(DEFAULT_SETTINGS.files).toEqual({ defaultOpenWith: "os", openWith: {}, unsupportedOpensWithOs: true });
   });
 
   it("모르는 필드는 버리고, 범위 밖·타입 불일치 값은 필드 단위로 기본값에 되돌린다", () => {
@@ -95,6 +96,26 @@ describe("parseSettings", () => {
 
   it("files가 빠지면 기본값을 쓴다", () => {
     expect(parseSettings({ language: "en" }).files).toEqual(DEFAULT_SETTINGS.files);
+  });
+
+  it("files.defaultOpenWith는 유효한 대상만 받고, 아니면 연결 프로그램으로 되돌린다", () => {
+    expect(parseSettings({ files: { defaultOpenWith: "in-app" } }).files.defaultOpenWith).toBe("in-app");
+    expect(parseSettings({ files: { defaultOpenWith: "browser" } }).files.defaultOpenWith).toBe("os");
+  });
+});
+
+describe("resolveFileOpenTarget", () => {
+  const files = { defaultOpenWith: "os" as const, openWith: { md: "in-app" as const }, unsupportedOpensWithOs: true };
+
+  it("확장자별 지정이 기본값보다 우선한다", () => {
+    expect(resolveFileOpenTarget(files, "md")).toBe("in-app");
+    expect(resolveFileOpenTarget(files, "html")).toBe("os");
+    expect(resolveFileOpenTarget(files, null)).toBe("os");
+  });
+
+  it("호출한 쪽의 fallback은 기본값만 대신하고 확장자별 지정은 넘지 않는다", () => {
+    expect(resolveFileOpenTarget(files, "html", "in-app")).toBe("in-app");
+    expect(resolveFileOpenTarget({ ...files, openWith: { md: "vscode" } }, "md", "in-app")).toBe("vscode");
   });
 });
 

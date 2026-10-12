@@ -1,6 +1,6 @@
 import type { GitPanelData } from "@shared/api-types";
 import type { FileExplorerTarget, FileTreeEntry, WorkspaceChangedPaths } from "@shared/file-explorer-types";
-import { ChevronDown, ChevronRight, Eraser, RefreshCw, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronRight, Eraser, FolderOpen, RefreshCw, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { FileIcon, FolderIcon } from "./file-icons";
 import { fileExtensionOf } from "./file-tabs";
@@ -31,7 +31,10 @@ export interface FileExplorerProps {
   selectedRelativePath: string | null;
   /** Greys out "VS Code로 열기" when no editor was found, exactly as the folder menu does. */
   vscodeAvailable: boolean;
+  /** A double-click or Enter on a file: the settings decide where it opens. */
   onOpenFile(entry: FileTreeEntry): void;
+  /** Opens the entry in an in-app document pane, whatever the settings' default is. */
+  onOpenFileInApp(entry: FileTreeEntry): void;
   /** Opens the entry with its OS-associated program, same as a double-click in the file explorer. */
   onOpenFileExternal(entry: FileTreeEntry): void;
   /** A folder reports its own path; every open tab at or below it belongs to the deleted subtree. */
@@ -207,6 +210,7 @@ interface TreeNodeSharedProps {
   editing: EditingState | null;
   menuTargetPath: string | null;
   onToggleDir(relativePath: string): void;
+  onSelectFile(relativePath: string): void;
   onOpenFile(entry: FileTreeEntry): void;
   onOpenMenu(event: ReactMouseEvent, entry: FileTreeEntry): void;
   onSubmitEdit(name: string): void;
@@ -224,6 +228,7 @@ function TreeNode({
   editing,
   menuTargetPath,
   onToggleDir,
+  onSelectFile,
   onOpenFile,
   onOpenMenu,
   onSubmitEdit,
@@ -255,7 +260,20 @@ function TreeNode({
         <button
           type="button"
           className={rowClass}
-          onClick={() => (isDirectory ? onToggleDir(entry.relativePath) : onOpenFile(entry))}
+          // A folder opens on one click, as in VS Code; a file only gets selected, and opens on a
+          // double-click or Enter, as in the Windows file explorer.
+          onClick={() => (isDirectory ? onToggleDir(entry.relativePath) : onSelectFile(entry.relativePath))}
+          onDoubleClick={isDirectory ? undefined : () => onOpenFile(entry)}
+          onKeyDown={
+            isDirectory
+              ? undefined
+              : (event) => {
+                  if (event.key !== "Enter") return;
+                  // Without this the button's own Enter would also fire the select-only click.
+                  event.preventDefault();
+                  onOpenFile(entry);
+                }
+          }
           onContextMenu={(event) => onOpenMenu(event, entry)}
           title={rowTitle}
         >
@@ -287,6 +305,7 @@ function TreeNode({
           editing={editing}
           menuTargetPath={menuTargetPath}
           onToggleDir={onToggleDir}
+          onSelectFile={onSelectFile}
           onOpenFile={onOpenFile}
           onOpenMenu={onOpenMenu}
           onSubmitEdit={onSubmitEdit}
@@ -305,6 +324,7 @@ export function FileExplorer({
   selectedRelativePath,
   vscodeAvailable,
   onOpenFile,
+  onOpenFileInApp,
   onOpenFileExternal,
   onEntryDeleted,
   onEntryRenamed,
@@ -318,6 +338,8 @@ export function FileExplorer({
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  /** The file a single click selected; it outranks the open tab until another target is shown. */
+  const [clicked, setClicked] = useState<{ targetKey: string; relativePath: string } | null>(null);
   const directoryRequestGenerations = useRef(new Map<string, number>());
   const activeTargetKey = useRef(targetKey(target));
   const targetGeneration = useRef(0);
@@ -595,6 +617,22 @@ export function FileExplorer({
         <button
           className="icon-button"
           type="button"
+          onClick={() =>
+            runAction((activeTarget) =>
+              activeTarget.kind === "worktree"
+                ? window.multiCliWork.worktrees.reveal(activeTarget.id)
+                : window.multiCliWork.projects.reveal(activeTarget.id),
+            )
+          }
+          disabled={!target}
+          aria-label="파일 탐색기에서 열기"
+          title="파일 탐색기에서 열기"
+        >
+          <FolderOpen size={16} />
+        </button>
+        <button
+          className="icon-button"
+          type="button"
           onClick={refresh}
           disabled={!target}
           aria-label="파일 목록 새로고침"
@@ -629,12 +667,15 @@ export function FileExplorer({
             dirPath=""
             expandedDirs={expandedDirs}
             childrenByDir={childrenByDir}
-            selectedRelativePath={selectedRelativePath}
+            selectedRelativePath={
+              clicked && clicked.targetKey === renderedTargetKey ? clicked.relativePath : selectedRelativePath
+            }
             git={git}
             changes={changes}
             editing={editing}
             menuTargetPath={menu?.entry?.relativePath ?? null}
             onToggleDir={toggleDir}
+            onSelectFile={(relativePath) => setClicked({ targetKey: renderedTargetKey, relativePath })}
             onOpenFile={onOpenFile}
             onOpenMenu={openMenu}
             onSubmitEdit={submitEdit}
@@ -650,6 +691,7 @@ export function FileExplorer({
           y={menu.y}
           vscodeAvailable={vscodeAvailable}
           onOpen={() => menu.entry && onOpenFile(menu.entry)}
+          onOpenInApp={() => menu.entry && onOpenFileInApp(menu.entry)}
           onOpenExternal={() => menu.entry && onOpenFileExternal(menu.entry)}
           onToggle={() => menu.entry && toggleDir(menu.entry.relativePath)}
           onCreate={(kind) =>

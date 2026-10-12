@@ -713,7 +713,9 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
     const readmePath = path.join(tempRoot, "sample-project", "readme.md");
     await fs.writeFile(readmePath, "# Smoke checklist\n\n- [ ] verify Markdown\n", "utf8");
     await page.locator(".file-explorer").getByRole("tab", { name: "파일", exact: true }).click();
-    await page.locator(".file-explorer").getByRole("button", { name: "readme.md", exact: true }).click();
+    // A row opens with the OS by default; the in-app viewer is behind the context menu.
+    await page.locator(".file-explorer").getByRole("button", { name: "readme.md", exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "앱에서 열기" }).click();
     const checkbox = page.getByRole("checkbox", { name: "작업 1" });
     await expect(checkbox).not.toBeChecked();
     await checkbox.click();
@@ -1453,38 +1455,44 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
   });
 
   test("opens a file path the session printed on Ctrl+click, at its line", async () => {
-    await openFolder();
-    const before = await page.locator(".grid-pane").count();
-    await page.getByRole("button", { name: `새 ${SHELL_LABEL} 세션` }).first().click();
-    await expect(page.locator(".grid-pane")).toHaveCount(before + 1);
-    const terminal = page.locator(".grid-pane").last().getByRole("region", { name: `${SHELL_ID} 터미널` });
-    await terminal.click();
-    // Built from two halves, so the echoed command line never reads as the path on its own.
-    await page.keyboard.type(shellCommand("Write-Output ('readme.md' + ':1')", "echo 'readme.md'':1'"));
-    await page.keyboard.press("Enter");
-    // The output row is the one that is the path and nothing else; the last such row if a slow
-    // runner left the screen holding it twice.
-    const row = terminal.locator(".xterm-rows > div").filter({ hasText: /^readme\.md:1\s*$/ }).last();
-    await expect(row).toBeVisible();
-    const box = (await row.boundingBox())!;
-    const x = box.x + 6;
-    const y = box.y + box.height / 2;
-    // Hovering is what asks main whether the path is a file; only then is it a link.
-    await page.mouse.move(x, y);
-    await expect(terminal.locator(".xterm-cursor-pointer")).toHaveCount(1);
-    // A plain click is a text click, not an open.
-    await page.mouse.click(x, y);
-    await expect(page.getByRole("region", { name: "readme.md 파일 보기" })).toHaveCount(0);
-    await page.keyboard.down("Control");
-    await page.mouse.click(x, y);
-    await page.keyboard.up("Control");
-    const editor = page.getByRole("textbox", { name: "readme.md 편집" });
-    await expect(editor).toBeFocused();
-    // An earlier test may have rewritten the file; line 1 is whatever is on disk now.
-    const firstLine = (await fs.readFile(path.join(tempRoot, "sample-project", "readme.md"), "utf8")).split(/\r?\n/)[0];
-    expect(await editor.evaluate((field: HTMLTextAreaElement) => field.value.slice(field.selectionStart, field.selectionEnd))).toBe(
-      firstLine,
-    );
+    // Ctrl+click follows 설정 › 파일 › 기본 열기, which is the OS by default; this checks the in-app path.
+    await page.evaluate(() => window.multiCliWork.settings.update({ files: { defaultOpenWith: "in-app" } }));
+    try {
+      await openFolder();
+      const before = await page.locator(".grid-pane").count();
+      await page.getByRole("button", { name: `새 ${SHELL_LABEL} 세션` }).first().click();
+      await expect(page.locator(".grid-pane")).toHaveCount(before + 1);
+      const terminal = page.locator(".grid-pane").last().getByRole("region", { name: `${SHELL_ID} 터미널` });
+      await terminal.click();
+      // Built from two halves, so the echoed command line never reads as the path on its own.
+      await page.keyboard.type(shellCommand("Write-Output ('readme.md' + ':1')", "echo 'readme.md'':1'"));
+      await page.keyboard.press("Enter");
+      // The output row is the one that is the path and nothing else; the last such row if a slow
+      // runner left the screen holding it twice.
+      const row = terminal.locator(".xterm-rows > div").filter({ hasText: /^readme\.md:1\s*$/ }).last();
+      await expect(row).toBeVisible();
+      const box = (await row.boundingBox())!;
+      const x = box.x + 6;
+      const y = box.y + box.height / 2;
+      // Hovering is what asks main whether the path is a file; only then is it a link.
+      await page.mouse.move(x, y);
+      await expect(terminal.locator(".xterm-cursor-pointer")).toHaveCount(1);
+      // A plain click is a text click, not an open.
+      await page.mouse.click(x, y);
+      await expect(page.getByRole("region", { name: "readme.md 파일 보기" })).toHaveCount(0);
+      await page.keyboard.down("Control");
+      await page.mouse.click(x, y);
+      await page.keyboard.up("Control");
+      const editor = page.getByRole("textbox", { name: "readme.md 편집" });
+      await expect(editor).toBeFocused();
+      // An earlier test may have rewritten the file; line 1 is whatever is on disk now.
+      const firstLine = (await fs.readFile(path.join(tempRoot, "sample-project", "readme.md"), "utf8")).split(/\r?\n/)[0];
+      expect(await editor.evaluate((field: HTMLTextAreaElement) => field.value.slice(field.selectionStart, field.selectionEnd))).toBe(
+        firstLine,
+      );
+    } finally {
+      await page.evaluate(() => window.multiCliWork.settings.update({ files: { defaultOpenWith: "os" } }));
+    }
   });
 
   test("sends a line note left on the local diff to a session of the same folder", async () => {

@@ -2453,6 +2453,9 @@ export function App() {
         }
         vscodeAvailable={availability.vscode}
         onOpenFile={(entry) => fileExplorerTarget && openFile(fileExplorerTarget, fileExplorerTargetLabel ?? "", entry)}
+        onOpenFileInApp={(entry) =>
+          fileExplorerTarget && openFile(fileExplorerTarget, fileExplorerTargetLabel ?? "", entry, "in-app")
+        }
         onOpenFileExternal={(entry) => fileExplorerTarget && openWithOs(fileExplorerTarget, entry)}
         onEntryDeleted={(relativePath, kind) =>
           fileExplorerTarget && closeFileTabsUnder(fileExplorerTarget, relativePath, kind)

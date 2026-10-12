@@ -21,8 +21,11 @@ const panelData = vi.fn();
 const writeText = vi.fn();
 const changedPaths = vi.fn();
 const clearChanges = vi.fn();
+const projectReveal = vi.fn();
+const worktreeReveal = vi.fn();
 
 const onOpenFile = vi.fn();
+const onOpenFileInApp = vi.fn();
 const onOpenFileExternal = vi.fn();
 const onEntryDeleted = vi.fn();
 const onEntryRenamed = vi.fn();
@@ -36,6 +39,7 @@ function renderExplorer(activeTarget = target) {
       selectedRelativePath={null}
       vscodeAvailable
       onOpenFile={onOpenFile}
+      onOpenFileInApp={onOpenFileInApp}
       onOpenFileExternal={onOpenFileExternal}
       onEntryDeleted={onEntryDeleted}
       onEntryRenamed={onEntryRenamed}
@@ -81,12 +85,16 @@ describe("FileExplorer context menu", () => {
     writeText.mockResolvedValue(undefined);
     changedPaths.mockResolvedValue({ agentPaths: [], baselineMs: 0 });
     clearChanges.mockResolvedValue(undefined);
+    projectReveal.mockResolvedValue(undefined);
+    worktreeReveal.mockResolvedValue(undefined);
     Object.assign(window, {
       multiCliWork: {
         workspaceFiles: {
           listDirectory, absolutePath, reveal, openInEditor, create, rename, duplicate, trash,
           changedPaths, clearChanges,
         },
+        projects: { reveal: projectReveal },
+        worktrees: { reveal: worktreeReveal },
         git: { panelData },
         clipboard: { writeText },
       },
@@ -103,6 +111,7 @@ describe("FileExplorer context menu", () => {
         selectedRelativePath={null}
         vscodeAvailable
         onOpenFile={onOpenFile}
+        onOpenFileInApp={onOpenFileInApp}
         onOpenFileExternal={onOpenFileExternal}
         onEntryDeleted={onEntryDeleted}
         onEntryRenamed={onEntryRenamed}
@@ -251,6 +260,69 @@ describe("FileExplorer context menu", () => {
     await openMenu("src");
     expect(screen.queryByRole("menuitem", { name: "연결 프로그램으로 열기" })).not.toBeInTheDocument();
   });
+
+  it("opens a file in the app from the context menu", async () => {
+    renderExplorer();
+    await openMenu("readme.md");
+    fireEvent.click(screen.getByRole("menuitem", { name: "앱에서 열기" }));
+    expect(onOpenFileInApp).toHaveBeenCalledWith(file);
+    expect(onOpenFile).not.toHaveBeenCalled();
+  });
+});
+
+describe("FileExplorer opening", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listDirectory.mockImplementation(async (_target, relativePath: string) =>
+      relativePath === "" ? [folder, file] : [nested],
+    );
+    changedPaths.mockResolvedValue({ agentPaths: [], baselineMs: 0 });
+    panelData.mockResolvedValue(null);
+    projectReveal.mockResolvedValue(undefined);
+    worktreeReveal.mockResolvedValue(undefined);
+    Object.assign(window, {
+      multiCliWork: {
+        workspaceFiles: { listDirectory, changedPaths, clearChanges },
+        projects: { reveal: projectReveal },
+        worktrees: { reveal: worktreeReveal },
+        git: { panelData },
+      },
+    });
+  });
+
+  it("selects a file on a single click and opens it only on a double click or Enter", async () => {
+    renderExplorer();
+    const readme = await row("readme.md");
+
+    fireEvent.click(readme);
+    expect(onOpenFile).not.toHaveBeenCalled();
+    expect(readme).toHaveClass("selected");
+
+    fireEvent.doubleClick(readme);
+    expect(onOpenFile).toHaveBeenCalledWith(file);
+
+    fireEvent.keyDown(readme, { key: "Enter" });
+    expect(onOpenFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("still expands a folder on a single click", async () => {
+    renderExplorer();
+    fireEvent.click(await row("src"));
+    expect(await row("main.ts")).toBeInTheDocument();
+    expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
+  it("opens the project or worktree folder in the system file manager from the header", async () => {
+    const view = renderExplorer();
+    fireEvent.click(await screen.findByRole("button", { name: "파일 탐색기에서 열기" }));
+    await waitFor(() => expect(projectReveal).toHaveBeenCalledWith("p1"));
+
+    view.unmount();
+    renderExplorer({ kind: "worktree", id: "w1" } as never);
+    fireEvent.click(await screen.findByRole("button", { name: "파일 탐색기에서 열기" }));
+    await waitFor(() => expect(worktreeReveal).toHaveBeenCalledWith("w1"));
+    expect(projectReveal).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("FileExplorer change highlighting", () => {
@@ -336,7 +408,7 @@ describe("FileExplorer directory request ownership", () => {
     listDirectory.mockImplementation((readTarget) => readTarget.id === target.id ? oldRead.promise : Promise.resolve([{ ...file, name: "new.md", relativePath: "new.md" }]));
     const view = renderExplorer();
 
-    view.rerender(<FileExplorer hidden={false} target={nextTarget} targetLabel="Next" selectedRelativePath={null} vscodeAvailable onOpenFile={onOpenFile} onOpenFileExternal={onOpenFileExternal} onEntryDeleted={onEntryDeleted} onEntryRenamed={onEntryRenamed} />);
+    view.rerender(<FileExplorer hidden={false} target={nextTarget} targetLabel="Next" selectedRelativePath={null} vscodeAvailable onOpenFile={onOpenFile} onOpenFileInApp={onOpenFileInApp} onOpenFileExternal={onOpenFileExternal} onEntryDeleted={onEntryDeleted} onEntryRenamed={onEntryRenamed} />);
     await screen.findByText("new.md");
     await act(async () => oldRead.resolve([file]));
 
@@ -353,7 +425,7 @@ describe("FileExplorer directory request ownership", () => {
       aReads += 1;
       return aReads === 1 ? oldA.promise : newA.promise;
     });
-    const props = { hidden: false, targetLabel: "Repo", selectedRelativePath: null, vscodeAvailable: true, onOpenFile, onOpenFileExternal, onEntryDeleted, onEntryRenamed };
+    const props = { hidden: false, targetLabel: "Repo", selectedRelativePath: null, vscodeAvailable: true, onOpenFile, onOpenFileInApp, onOpenFileExternal, onEntryDeleted, onEntryRenamed };
     const view = render(<FileExplorer {...props} target={target} />);
     view.rerender(<FileExplorer {...props} target={targetB} />);
     await screen.findByText("b.md");
@@ -388,7 +460,7 @@ describe("FileExplorer directory request ownership", () => {
       readTarget.id === targetB.id ? targetBRead.promise : Promise.resolve([file]),
     );
     create.mockReturnValue(created.promise);
-    const props = { hidden: false, targetLabel: "Repo", selectedRelativePath: null, vscodeAvailable: true, onOpenFile, onOpenFileExternal, onEntryDeleted, onEntryRenamed };
+    const props = { hidden: false, targetLabel: "Repo", selectedRelativePath: null, vscodeAvailable: true, onOpenFile, onOpenFileInApp, onOpenFileExternal, onEntryDeleted, onEntryRenamed };
     const view = render(<FileExplorer {...props} target={target} />);
     await screen.findByText("readme.md");
     fireEvent.contextMenu(screen.getByRole("tree"), { clientX: 5, clientY: 5 });

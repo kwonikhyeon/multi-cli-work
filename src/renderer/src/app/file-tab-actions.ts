@@ -1,6 +1,6 @@
 import type { SlotViewState } from "@shared/app-state-types";
 import { needsRunConfirmation, type FileExplorerTarget, type FileTreeEntry } from "@shared/file-explorer-types";
-import type { AppSettings } from "@shared/settings-types";
+import { resolveFileOpenTarget, type AppSettings, type FileOpenTarget } from "@shared/settings-types";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { categorizeFile, fileExtensionOf, fileTabId, type OpenFileTab } from "../file-tabs";
 import { errorMessage } from "../ipc-error";
@@ -68,18 +68,25 @@ export function createFileTabActions(context: FileTabContext) {
     pendingFileWriteCountsRef,
   } = context;
 
-  const openFile = (target: FileExplorerTarget, targetLabel: string, entry: FileTreeEntry): string => {
+  /**
+   * Opens `entry` where `mode` says. Without one, a per-extension choice wins, then the settings'
+   * default (the OS-associated program, unless the user picked otherwise).
+   */
+  const openFile = (
+    target: FileExplorerTarget,
+    targetLabel: string,
+    entry: FileTreeEntry,
+    mode: FileOpenTarget = resolveFileOpenTarget(appSettings.files, entry.extension),
+  ): string => {
     if (entry.executable) {
       setRunConfirmRequest({ target, entry, mode: "run", error: null, running: false });
       return fileTabId(target, entry.relativePath);
     }
-    // 확장자별 기본 열기 대상이 지정돼 있으면 인앱 탭 대신 그리로 보낸다. "in-app"/미지정은 아래로 통과.
-    const openWith = appSettings.files.openWith[entry.extension ?? ""];
-    if (openWith === "os") {
+    if (mode === "os") {
       openWithOs(target, entry);
       return fileTabId(target, entry.relativePath);
     }
-    if (openWith === "vscode") {
+    if (mode === "vscode") {
       void window.multiCliWork.workspaceFiles
         .openInEditor(target, entry.relativePath)
         .catch((error) => setActionError(errorMessage(error)));
@@ -159,23 +166,29 @@ export function createFileTabActions(context: FileTabContext) {
   const openRelativeFile = (sourceTab: OpenFileTab, relativePath: string, anchor: string | null) => {
     const name = relativePath.split("/").at(-1) ?? relativePath;
     const extension = fileExtensionOf(name);
-    const tabId = openFile(sourceTab.target, sourceTab.targetLabel, {
-      name,
-      relativePath,
-      kind: "file",
-      extension,
-      // A Markdown link may open a file, but it can never execute one.
-      executable: false,
-      // Not read from a directory listing, so no real mtime is known here.
-      mtimeMs: 0,
-    });
+    // A link followed inside an in-app document stays in the app unless its extension says otherwise.
+    const tabId = openFile(
+      sourceTab.target,
+      sourceTab.targetLabel,
+      {
+        name,
+        relativePath,
+        kind: "file",
+        extension,
+        // A Markdown link may open a file, but it can never execute one.
+        executable: false,
+        // Not read from a directory listing, so no real mtime is known here.
+        mtimeMs: 0,
+      },
+      resolveFileOpenTarget(appSettings.files, extension, "in-app"),
+    );
     if (anchor) setPendingFileAnchor({ tabId, anchor });
   };
 
   /**
    * A file path Ctrl+clicked in a terminal, already resolved by main to a file under the session's
-   * root. It opens the way the explorer would for that extension; VS Code and the in-app viewer both
-   * land on the printed line.
+   * root. It opens the way the explorer would; VS Code and the in-app viewer both land on the printed
+   * line.
    */
   const openFileAt = (
     target: FileExplorerTarget,
@@ -185,22 +198,29 @@ export function createFileTabActions(context: FileTabContext) {
   ) => {
     const name = relativePath.split("/").at(-1) ?? relativePath;
     const extension = fileExtensionOf(name);
-    if (appSettings.files.openWith[extension ?? ""] === "vscode") {
+    const mode = resolveFileOpenTarget(appSettings.files, extension);
+    if (mode === "vscode") {
       void window.multiCliWork.workspaceFiles
         .openInEditor(target, relativePath, position ?? undefined)
         .catch((error) => setActionError(errorMessage(error)));
       return;
     }
-    const tabId = openFile(target, targetLabel, {
-      name,
-      relativePath,
-      kind: "file",
-      extension,
-      // A printed path may open a file, but it can never execute one.
-      executable: false,
-      mtimeMs: 0,
-    });
-    if (position) setPendingFileReveal({ tabId, ...position, nonce: Date.now() });
+    const tabId = openFile(
+      target,
+      targetLabel,
+      {
+        name,
+        relativePath,
+        kind: "file",
+        extension,
+        // A printed path may open a file, but it can never execute one.
+        executable: false,
+        mtimeMs: 0,
+      },
+      mode,
+    );
+    // An OS program gets no line to land on; only the in-app viewer does.
+    if (position && mode === "in-app") setPendingFileReveal({ tabId, ...position, nonce: Date.now() });
   };
 
   const forceOpenFileTab = (tabId: string) => {

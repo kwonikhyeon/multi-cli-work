@@ -931,10 +931,11 @@ describe("main IPC boundary", () => {
   it("saves the 파일 tab's settings instead of rejecting them as unknown fields", async () => {
     const { handlers, settingsGateway } = setup();
 
-    await handlers.get("settings:update")!({}, { files: { openWith: { pdf: "os", ts: "vscode" }, unsupportedOpensWithOs: false } });
+    await handlers.get("settings:update")!({}, { files: { defaultOpenWith: "in-app", openWith: { pdf: "os", ts: "vscode" }, unsupportedOpensWithOs: false } });
     expect(settingsGateway.update).toHaveBeenCalledWith({
-      files: { openWith: { pdf: "os", ts: "vscode" }, unsupportedOpensWithOs: false },
+      files: { defaultOpenWith: "in-app", openWith: { pdf: "os", ts: "vscode" }, unsupportedOpensWithOs: false },
     });
+    expect(() => handlers.get("settings:update")!({}, { files: { defaultOpenWith: "browser" } })).toThrow(/defaultOpenWith/);
     expect(() => handlers.get("settings:update")!({}, { files: { openWith: { ".pdf": "os" } } })).toThrow(/openWith/);
     expect(() => handlers.get("settings:update")!({}, { files: { openWith: { pdf: "browser" } } })).toThrow(/openWith/);
   });
