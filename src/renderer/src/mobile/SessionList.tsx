@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { TerminalStatus } from "@shared/terminal-types";
 import type { RemoteSessionSummary } from "@shared/remote-types";
 import type { RemoteClientState } from "./remote-client";
-import { groupSessions } from "./session-list-model";
+import { awaitingCount, nextAwaiting, splitAwaiting } from "./session-list-model";
 
 export const STATUS_LABEL: Record<TerminalStatus, string> = {
   starting: "시작 중",
@@ -48,10 +48,44 @@ export function SessionList({
   children,
 }: SessionListProps) {
   const banner = CONNECTION_LABEL[connection];
+  const waiting = awaitingCount(sessions, activeSessionId ?? null);
+  const { awaiting, groups } = splitAwaiting(sessions);
+  const row = (session: RemoteSessionSummary, showFolder: boolean) => (
+    <button
+      type="button"
+      className="m-session"
+      key={session.id}
+      aria-current={session.id === activeSessionId ? "true" : undefined}
+      onClick={() => onOpen(session.id)}
+    >
+      <span className={`m-dot m-dot-${session.status}`} aria-hidden="true" />
+      <span className="m-session-text">
+        <span className="m-session-label">{session.label}</span>
+        <small className="m-session-meta">
+          {[showFolder ? (session.projectName ?? "폴더 없음") : null, session.kind, session.worktreeBranch]
+            .filter(Boolean)
+            .join(" · ")}
+        </small>
+      </span>
+      <span className={`m-status m-status-${session.status}`}>{STATUS_LABEL[session.status]}</span>
+    </button>
+  );
   return (
     <main className="m-list">
       <header className="m-bar">
         <h1>{hostName}</h1>
+        {waiting > 0 ? (
+          <button
+            type="button"
+            className="m-await-jump"
+            onClick={() => {
+              const next = nextAwaiting(sessions, activeSessionId ?? null);
+              if (next) onOpen(next.id);
+            }}
+          >
+            대기 {waiting}
+          </button>
+        ) : null}
         <button type="button" disabled={connection !== "open"} onClick={onNewSession}>
           새 세션
         </button>
@@ -62,24 +96,16 @@ export function SessionList({
       {banner ? <p className="m-banner">{banner}</p> : null}
       {children}
       {sessions.length === 0 ? <p className="m-empty">열린 세션이 없습니다</p> : null}
-      {groupSessions(sessions).map((group) => (
-        <section key={group.projectName}>
+      {awaiting.length > 0 ? (
+        <section className="m-awaiting-group" aria-label="대기 중">
+          <h2>대기 중</h2>
+          {awaiting.map((session) => row(session, true))}
+        </section>
+      ) : null}
+      {groups.map((group) => (
+        <section key={group.projectName} aria-label={group.projectName}>
           <h2>{group.projectName}</h2>
-          {group.sessions.map((session) => (
-            <button
-              type="button"
-              className="m-session"
-              key={session.id}
-              aria-current={session.id === activeSessionId ? "true" : undefined}
-              onClick={() => onOpen(session.id)}
-            >
-              <span className="m-session-label">
-                {session.label}
-                {session.worktreeBranch ? <small className="m-session-branch"> · {session.worktreeBranch}</small> : null}
-              </span>
-              <span className={`m-status m-status-${session.status}`}>{STATUS_LABEL[session.status]}</span>
-            </button>
-          ))}
+          {group.sessions.map((session) => row(session, false))}
         </section>
       ))}
     </main>

@@ -20,14 +20,37 @@ input, textarea { font: inherit; color: inherit; background: var(--m-surface); b
 .m-notice, .m-banner { color: var(--m-warn); padding: 0 12px; }
 .m-list section { padding: 0 12px 12px; }
 .m-list h2 { font-size: 13px; color: var(--m-muted); margin: 12px 0 6px; }
-.m-session { display: flex; width: 100%; justify-content: space-between; align-items: center; margin-bottom: 6px; text-align: left; }
-.m-session-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.m-session-branch { color: var(--m-muted); }
+.m-session { display: flex; width: 100%; align-items: center; gap: 10px; min-height: 48px; margin-bottom: 6px; text-align: left; }
+.m-session-text { display: grid; flex: 1 1 auto; min-width: 0; }
+.m-session-label, .m-session-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-session-meta { color: var(--m-muted); font-size: 12px; }
+.m-session-meta:empty { display: none; }
+/* 상태 점 — 탭 칩과 목록 행이 같은 색을 쓴다. 뜻은 aria-label·상태 글자가 따로 전한다. */
+.m-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--m-muted); }
+.m-dot-working, .m-dot-starting { background: var(--m-accent); }
+.m-dot-awaiting-input, .m-dot-awaiting-approval { background: var(--m-warn); width: 10px; height: 10px; }
+.m-dot-awaiting-approval { box-shadow: 0 0 0 2px rgba(224, 165, 38, 0.35); }
+.m-dot-exited, .m-dot-error { opacity: 0.4; }
+.m-dot-error { background: #ff6b6b; }
+.m-await-jump { border-color: var(--m-warn); color: var(--m-warn); }
+.m-awaiting-group h2 { color: var(--m-warn); }
+.m-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 0 12px 6px; scrollbar-width: none; }
+.m-tabs::-webkit-scrollbar { display: none; }
+.m-tabs button { flex: 0 0 auto; }
+.m-tab { display: flex; align-items: center; gap: 6px; max-width: 160px; padding: 6px 10px; }
+.m-tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-tab[aria-current="true"] { border-color: var(--m-accent); background: #1f2a3d; }
+.m-tab-awaiting { border-color: var(--m-warn); }
+.m-tab-awaiting .m-dot { animation: m-pulse 1.6s ease-in-out infinite; }
+.m-tab-new { min-width: 40px; justify-content: center; }
+@keyframes m-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .m-tab-awaiting .m-dot { animation: none; } }
 .m-empty { color: var(--m-muted); padding: 24px 12px; }
 .m-status { font-size: 12px; color: var(--m-muted); white-space: nowrap; }
 .m-status-awaiting-input, .m-status-awaiting-approval { color: var(--m-warn); }
 .m-status-working { color: var(--m-accent); }
 .m-session-screen { display: grid; grid-template-rows: auto auto 1fr auto auto; height: 100%; }
+.m-session-screen.m-has-tabs { grid-template-rows: auto auto auto 1fr auto auto; }
 .m-tools { display: flex; gap: 6px; padding: 0 12px 6px; }
 .m-tools [aria-pressed="true"] { border-color: var(--m-accent); color: var(--m-accent); }
 .m-terminal { min-height: 0; overflow: auto; padding: 0 4px; }

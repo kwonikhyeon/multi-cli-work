@@ -1,4 +1,5 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RemoteSessionSummary } from "@shared/remote-types";
 import { MobileApp } from "./MobileApp";
@@ -9,13 +10,21 @@ vi.mock("./SessionScreen", () => ({
     session,
     wide,
     onMeasured,
+    onBack,
+    tabs,
   }: {
     session: RemoteSessionSummary;
     wide?: boolean;
     onMeasured?(size: { cols: number; rows: number }): void;
+    onBack(): void;
+    tabs?: ReactNode;
   }) => (
     <div data-testid="screen" data-wide={String(Boolean(wide))}>
-      {session.label}
+      <span data-testid="screen-label">{session.label}</span>
+      <button type="button" onClick={onBack}>
+        세션 목록으로
+      </button>
+      {tabs}
       <button type="button" onClick={() => onMeasured?.({ cols: 150, rows: 40 })}>
         재기
       </button>
@@ -77,7 +86,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   delete (window as unknown as { McwShell?: unknown }).McwShell;
-  window.location.hash = "";
+  window.history.replaceState(null, "", window.location.pathname);
 });
 
 describe("MobileApp", () => {
@@ -99,7 +108,63 @@ describe("MobileApp", () => {
     connect();
     fireEvent.click(screen.getByRole("button", { name: /리팩터/ }));
     expect(screen.getByTestId("screen")).toHaveAttribute("data-wide", "false");
-    expect(screen.queryByRole("button", { name: /테스트/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "회사PC" })).not.toBeInTheDocument();
+  });
+
+  it("switches sessions from the tab strip without stacking history, and goes back to the list", async () => {
+    useScreen(false);
+    render(<MobileApp />);
+    connect();
+    const before = window.history.length;
+    fireEvent.click(screen.getByRole("button", { name: /리팩터/ }));
+    expect(window.location.hash).toBe("#session=s1");
+    expect(window.history.length).toBe(before + 1);
+    fireEvent.click(screen.getByRole("button", { name: "테스트, 대기" }));
+    expect(screen.getByTestId("screen-label")).toHaveTextContent("테스트");
+    expect(window.location.hash).toBe("#session=s2");
+    expect(window.history.length).toBe(before + 1);
+    fireEvent.click(screen.getByRole("button", { name: "세션 목록으로" }));
+    await waitFor(() => expect(screen.queryByTestId("screen")).not.toBeInTheDocument());
+    expect(window.location.hash).toBe("");
+  });
+
+  it("returns to the list on the browser's back", async () => {
+    useScreen(false);
+    render(<MobileApp />);
+    connect();
+    fireEvent.click(screen.getByRole("button", { name: /리팩터/ }));
+    act(() => window.history.back());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "회사PC" })).toBeInTheDocument());
+  });
+
+  it("puts the list under a session opened by link, so one back reaches the list", async () => {
+    useScreen(false);
+    window.location.hash = "#session=s2";
+    render(<MobileApp />);
+    connect();
+    expect(screen.getByTestId("screen-label")).toHaveTextContent("테스트");
+    fireEvent.click(screen.getByRole("button", { name: "세션 목록으로" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "회사PC" })).toBeInTheDocument());
+    expect(window.location.hash).toBe("");
+  });
+
+  it("goes from a tab's + to the new session form on the list", async () => {
+    useScreen(false);
+    render(<MobileApp />);
+    connect();
+    fireEvent.click(screen.getByRole("button", { name: /리팩터/ }));
+    fireEvent.click(screen.getByRole("button", { name: "새 세션" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "회사PC" })).toBeInTheDocument());
+    expect(screen.getByText("불러오는 중…")).toBeInTheDocument();
+    expect(FakeSocket.last!.sent).toContainEqual({ type: "catalog" });
+  });
+
+  it("has no tab strip beside the list on a wide screen", () => {
+    useScreen(true);
+    render(<MobileApp />);
+    connect();
+    fireEvent.click(screen.getByRole("button", { name: /리팩터/ }));
+    expect(screen.queryByRole("navigation", { name: "세션 탭" })).not.toBeInTheDocument();
   });
 
   it("opens the session a link points at, and follows a new link", () => {

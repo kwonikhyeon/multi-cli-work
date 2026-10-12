@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SessionList } from "./SessionList";
 
@@ -40,6 +40,28 @@ describe("SessionList", () => {
       />,
     );
     expect(screen.getByRole("button", { name: /리팩터.*feat\/search/ })).toBeInTheDocument();
+  });
+
+  it("gathers waiting sessions at the top with their folder, and jumps to one", () => {
+    const onOpen = vi.fn();
+    render(
+      <SessionList
+        hostName="PC"
+        connection="open"
+        sessions={[
+          { id: "1", projectId: "p", projectName: "A", kind: "claude", label: "리팩터", status: "working", updatedAt: "" },
+          { id: "2", projectId: "q", projectName: "B", kind: "codex", label: "검토", status: "awaiting-approval", updatedAt: "" },
+        ]}
+        onOpen={onOpen}
+        onUnpair={vi.fn()}
+        onNewSession={vi.fn()}
+      />,
+    );
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
+    expect(headings).toEqual(["대기 중", "A"]);
+    expect(within(screen.getByRole("region", { name: "대기 중" })).getByRole("button", { name: /검토.*B · codex/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "대기 1" }));
+    expect(onOpen).toHaveBeenCalledWith("2");
   });
 
   it("says when there is nothing to show and when the link is down", () => {

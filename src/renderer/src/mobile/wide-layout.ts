@@ -23,3 +23,7 @@ export function sessionIdFromHash(hash: string): string | null {
   const value = new URLSearchParams(hash.replace(/^#/, "")).get("session");
   return value && value.length > 0 ? value : null;
 }
+
+export function sessionHash(sessionId: string): string {
+  return `#${new URLSearchParams({ session: sessionId }).toString()}`;
+}

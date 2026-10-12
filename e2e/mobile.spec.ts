@@ -229,6 +229,22 @@ process.stdin.on("data", (data) => {
       await phone.getByRole("button", { name: "전송" }).click();
     }
 
+    // 세션 탭 줄로 다른 세션에 바로 옮겨 가고, 뒤로가기는 PC 목록이 아니라 세션 목록으로 간다.
+    await page.getByRole("button", { name: `새 ${SHELL_LABEL} 세션` }).click();
+    const otherTab = phone.locator(".m-tab:not(.m-tab-new):not([aria-current])");
+    await expect(otherTab).toHaveCount(1);
+    const firstHash = await phone.evaluate(() => window.location.hash);
+    await otherTab.click();
+    await expect(phone.locator(".m-tab[aria-current]")).toHaveCount(1);
+    await expect.poll(() => phone.evaluate(() => window.location.hash)).not.toBe(firstHash);
+    await expect(phone.locator(".m-terminal .xterm-rows")).not.toContainText("MCW_FROM_PHONE");
+    await phone.getByLabel("입력").fill(WINDOWS ? "Write-Output MCW_IN_TAB_B" : "echo MCW_IN_TAB_B");
+    await phone.getByRole("button", { name: "전송" }).click();
+    await expect(phone.locator(".m-terminal .xterm-rows")).toContainText("MCW_IN_TAB_B");
+    await phone.goBack();
+    await expect(phone.getByRole("heading", { name: "Sample Project" })).toBeVisible();
+    await expect(phone.locator(".m-session")).toHaveCount(2);
+
     // 철회하면 폰은 페어링 화면으로 돌아간다.
     const devices = await page.evaluate(() => window.multiCliWork.remote.listDevices());
     expect(devices).toHaveLength(1);

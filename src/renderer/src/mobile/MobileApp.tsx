@@ -16,7 +16,19 @@ import { SessionList } from "./SessionList";
 import { SessionScreen } from "./SessionScreen";
 import { applySessionMessage } from "./session-list-model";
 import { readShellBridge } from "./shell-bridge";
-import { sessionIdFromHash, useWideLayout } from "./wide-layout";
+import { SessionTabs } from "./SessionTabs";
+import { sessionHash, sessionIdFromHash, useWideLayout } from "./wide-layout";
+
+/** 이 앱이 세션 화면으로 쌓은 history 항목 표시. 이 항목에서 ←는 history.back()이다. */
+const SESSION_ENTRY = { mcw: "session" } as const;
+
+function isSessionEntry(state: unknown): boolean {
+  return typeof state === "object" && state !== null && (state as { mcw?: unknown }).mcw === "session";
+}
+
+function listUrl(): string {
+  return window.location.pathname + window.location.search;
+}
 
 function storage(): Storage | null {
   try {
@@ -42,15 +54,52 @@ export function MobileApp() {
   /** 세션 화면이 마지막으로 잰 터미널 크기. 새 세션을 이 화면에 맞는 크기로 띄우는 데 쓴다. */
   const measuredRef = useRef<MeasuredSize | null>(null);
 
-  // 셸이 열려 있는 창에 다른 세션을 가리키는 링크를 다시 로드하면 해시만 바뀐다.
+  const openSessionIdRef = useRef(openSessionId);
+  openSessionIdRef.current = openSessionId;
+  const wideRef = useRef(wide);
+  wideRef.current = wide;
+
+  // 세션 화면은 history 항목 하나다 — Android 뒤로가기(WebView goBack)가 PC 목록이 아니라 세션 목록으로
+  // 돌아오게. 링크(알림)로 바로 열었으면 목록 항목을 그 아래에 깔아 둔다.
   useEffect(() => {
+    if (!sessionIdFromHash(window.location.hash) || isSessionEntry(window.history.state)) return;
+    const sessionId = sessionIdFromHash(window.location.hash)!;
+    window.history.replaceState(null, "", listUrl());
+    window.history.pushState(SESSION_ENTRY, "", sessionHash(sessionId));
+  }, []);
+
+  useEffect(() => {
+    const onPopState = () => setOpenSessionId(sessionIdFromHash(window.location.hash));
+    // 셸이 열려 있는 창에 다른 세션을 가리키는 링크를 다시 로드하면 해시만 바뀌고, 브라우저가 새 항목을 만든다.
     const onHashChange = () => {
       const sessionId = sessionIdFromHash(window.location.hash);
-      if (sessionId) setOpenSessionId(sessionId);
+      if (sessionId && window.history.state === null) window.history.replaceState(SESSION_ENTRY, "", window.location.hash);
+      setOpenSessionId(sessionId);
     };
+    window.addEventListener("popstate", onPopState);
     window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      window.removeEventListener("hashchange", onHashChange);
+    };
   }, []);
+
+  /** 목록에서 열면 새 항목, 세션끼리 옮기면(탭) 지금 항목을 바꾼다. 넓은 화면은 목록이 늘 옆에 있어 바꾸기만 한다. */
+  const showSession = (sessionId: string, from: "list" | "session") => {
+    if (from === "list" && !wideRef.current) window.history.pushState(SESSION_ENTRY, "", sessionHash(sessionId));
+    else window.history.replaceState(window.history.state, "", sessionHash(sessionId));
+    setOpenSessionId(sessionId);
+  };
+  const showList = () => {
+    if (isSessionEntry(window.history.state)) {
+      window.history.back();
+      return;
+    }
+    window.history.replaceState(window.history.state, "", listUrl());
+    setOpenSessionId(null);
+  };
+  const showSessionRef = useRef(showSession);
+  showSessionRef.current = showSession;
 
   const [client, setClient] = useState<RemoteClient | null>(null);
 
@@ -63,7 +112,9 @@ export function MobileApp() {
       setSessions((current) => applySessionMessage(current, message));
       if (message.type === "catalog") setCatalog({ projects: message.projects, agents: message.agents });
       // 이 화면이 만들거나 다시 시작한 세션 — 바로 연다. 목록에는 created가 따로 실어 온다.
-      else if (message.type === "started") setOpenSessionId(message.sessionId);
+      else if (message.type === "started") {
+        showSessionRef.current(message.sessionId, openSessionIdRef.current ? "session" : "list");
+      }
       // 인증·버전 오류는 연결이 끊기며 따로 처리된다. 여기서는 요청이 거절된 이유만 보인다.
       else if (message.type === "error" && message.code !== "unauthorized" && message.code !== "protocol") {
         setRefusal(message.message);
@@ -109,12 +160,18 @@ export function MobileApp() {
   }
 
   const openSession = sessions.find((session) => session.id === openSessionId) ?? null;
+  const openNewSessionForm = () => {
+    // 폴더·에이전트는 열 때마다 다시 묻는다 — 호스트에서 그사이 바뀌었을 수 있다.
+    setCatalog(null);
+    setNewSessionOpen(true);
+    client.send({ type: "catalog" });
+  };
   const list = (
     <SessionList
       hostName={pairing.hostName}
       connection={connection}
       sessions={sessions}
-      onOpen={setOpenSessionId}
+      onOpen={(sessionId) => showSession(sessionId, "list")}
       activeSessionId={wide ? (openSession?.id ?? null) : null}
       leaveLabel={bridge ? "호스트 목록" : "연결 해제"}
       onUnpair={() => {
@@ -125,12 +182,7 @@ export function MobileApp() {
         clearPairing(storage());
         setPairing(null);
       }}
-      onNewSession={() => {
-        // 폴더·에이전트는 열 때마다 다시 묻는다 — 호스트에서 그사이 바뀌었을 수 있다.
-        setCatalog(null);
-        setNewSessionOpen(true);
-        client.send({ type: "catalog" });
-      }}
+      onNewSession={openNewSessionForm}
     >
       {newSessionOpen ? (
         <NewSessionForm
@@ -164,10 +216,23 @@ export function MobileApp() {
       session={openSession}
       deviceId={pairing.deviceId}
       wide={wide}
-      onBack={() => setOpenSessionId(null)}
+      onBack={showList}
       onMeasured={(size) => {
         measuredRef.current = { ...size, wide };
       }}
+      tabs={
+        wide ? undefined : (
+          <SessionTabs
+            sessions={sessions}
+            activeSessionId={openSession.id}
+            onSelect={(sessionId) => showSession(sessionId, "session")}
+            onNewSession={() => {
+              showList();
+              openNewSessionForm();
+            }}
+          />
+        )
+      }
     />
   ) : null;
 

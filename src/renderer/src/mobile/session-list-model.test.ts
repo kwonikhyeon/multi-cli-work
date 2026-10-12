@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { RemoteSessionSummary } from "@shared/remote-types";
-import { applySessionMessage, groupSessions } from "./session-list-model";
+import {
+  applySessionMessage,
+  awaitingCount,
+  groupSessions,
+  isAwaiting,
+  nextAwaiting,
+  splitAwaiting,
+} from "./session-list-model";
 
 const s = (id: string, overrides: Partial<RemoteSessionSummary> = {}): RemoteSessionSummary => ({
   id,
@@ -61,6 +68,48 @@ describe("groupSessions", () => {
       ["A", ["a"]],
       ["B", ["new", "old"]],
       ["폴더 없음", ["tool"]],
+    ]);
+  });
+});
+
+describe("waiting sessions", () => {
+  const sessions = [
+    s("1", { status: "awaiting-input" }),
+    s("2"),
+    s("3", { status: "awaiting-approval" }),
+    s("4", { status: "idle" }),
+  ];
+
+  it("counts only input and approval waits", () => {
+    expect(isAwaiting("awaiting-input")).toBe(true);
+    expect(isAwaiting("awaiting-approval")).toBe(true);
+    expect(isAwaiting("idle")).toBe(false);
+    expect(awaitingCount(sessions, null)).toBe(2);
+    expect(awaitingCount(sessions, "3")).toBe(1);
+  });
+
+  it("finds the next waiting session after the current one, wrapping around", () => {
+    expect(nextAwaiting(sessions, null)?.id).toBe("1");
+    expect(nextAwaiting(sessions, "1")?.id).toBe("3");
+    expect(nextAwaiting(sessions, "3")?.id).toBe("1");
+    expect(nextAwaiting(sessions, "4")?.id).toBe("1");
+  });
+
+  it("skips the current session and gives null when nothing else waits", () => {
+    expect(nextAwaiting([s("1", { status: "awaiting-input" }), s("2")], "1")).toBeNull();
+    expect(nextAwaiting([], null)).toBeNull();
+  });
+
+  it("pulls waiting sessions out of their folders", () => {
+    const { awaiting, groups } = splitAwaiting([
+      s("w", { projectName: "B", status: "awaiting-input" }),
+      s("a", { projectName: "A" }),
+      s("b", { projectName: "B" }),
+    ]);
+    expect(awaiting.map((entry) => entry.id)).toEqual(["w"]);
+    expect(groups.map((group) => [group.projectName, group.sessions.map((entry) => entry.id)])).toEqual([
+      ["A", ["a"]],
+      ["B", ["b"]],
     ]);
   });
 });

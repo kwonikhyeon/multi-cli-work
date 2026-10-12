@@ -1,7 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { RemoteSessionSummary } from "@shared/remote-types";
 import { createAutoFit, type AutoFit, type AutoFitState } from "./auto-fit";
 import { TERMINAL_FONT_INDEX, TERMINAL_FONT_SIZES, type TerminalSize } from "./initial-size";
@@ -19,6 +19,8 @@ interface SessionScreenProps {
   wide?: boolean;
   /** 이 화면에 들어가는 터미널 크기를 잴 때마다 알린다 — 새 세션을 그 크기로 띄우려고. */
   onMeasured?(size: TerminalSize): void;
+  /** 헤더 바로 아래에 그리는 세션 탭 줄(좁은 화면). */
+  tabs?: ReactNode;
 }
 
 const FONT_SIZES = TERMINAL_FONT_SIZES;
@@ -29,7 +31,7 @@ const AUTO_FIT_DEBOUNCE_MS = 150;
  * 켜면 이 화면 폭으로 PTY를 줄인다. 넓은 화면(PC)은 반대로 이 창 크기에 맞추는 것이 기본이다. 어느
  * 쪽이든 호스트가 크기를 되찾으면(입력·패인 크기 변경) 맞춤이 꺼지거나 멈춘다.
  */
-export function SessionScreen({ client, session, deviceId, onBack, wide = false, onMeasured }: SessionScreenProps) {
+export function SessionScreen({ client, session, deviceId, onBack, wide = false, onMeasured, tabs }: SessionScreenProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -300,7 +302,7 @@ export function SessionScreen({ client, session, deviceId, onBack, wide = false,
   const sendKeys = (data: string) => client.send({ type: "write", sessionId: session.id, data });
 
   return (
-    <main className="m-session-screen">
+    <main className={tabs ? "m-session-screen m-has-tabs" : "m-session-screen"}>
       <header className="m-bar">
         {wide ? null : (
           <button type="button" onClick={onBack} aria-label="세션 목록으로">
@@ -340,6 +342,7 @@ export function SessionScreen({ client, session, deviceId, onBack, wide = false,
           </button>
         )}
       </header>
+      {tabs}
       <div className="m-tools">
         {wide ? (
           <>
