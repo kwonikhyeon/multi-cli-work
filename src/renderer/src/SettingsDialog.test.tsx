@@ -39,6 +39,8 @@ describe("SettingsDialog", () => {
     render(<SettingsDialog settings={DEFAULT_SETTINGS} onClose={() => undefined} />);
     fireEvent.click(screen.getByLabelText("창을 닫으면 트레이에 남기기"));
     await waitFor(() => expect(update).toHaveBeenCalledWith({ general: { closeToTray: false } }));
+    fireEvent.click(screen.getByLabelText("애니메이션 줄이기"));
+    await waitFor(() => expect(update).toHaveBeenCalledWith({ general: { reduceMotion: true } }));
   });
 
   it("알림 탭에서 방해 금지 시간대를 켜고 시각을 바꾼다", async () => {

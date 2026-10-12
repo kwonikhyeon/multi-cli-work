@@ -2014,6 +2014,12 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
   }
 }
 
+/* Every reduced-motion block has a :root[data-reduce-motion] twin for the app's own setting. */
+:root[data-reduce-motion] .file-tree-row.change-fresh {
+  animation: none;
+  background-color: color-mix(in srgb, var(--violet) 18%, transparent);
+}
+
 .file-tree-state {
   display: flex;
   align-items: center;
@@ -2713,6 +2719,11 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
     animation: none;
     background: color-mix(in srgb, var(--teal) 24%, transparent);
   }
+}
+
+:root[data-reduce-motion] .project-row.flash {
+  animation: none;
+  background: color-mix(in srgb, var(--teal) 24%, transparent);
 }
 
 .project-row.hidden-project .project-copy {
@@ -3834,6 +3845,14 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
   }
 }
 
+:root[data-reduce-motion] .pane-progress-indeterminate .pane-progress-fill,
+:root[data-reduce-motion] .pane-progress-working .pane-progress-fill {
+  width: 100%;
+  animation: none;
+  transform: none;
+  opacity: 0.45;
+}
+
 .pane-chips {
   display: inline-flex;
   flex: 0 1 auto;
@@ -4052,6 +4071,18 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
     animation: none;
     background-color: color-mix(in srgb, var(--signal-accent) 18%, transparent);
   }
+}
+
+:root[data-reduce-motion] .grid-pane.just-completed .pane-signal::after,
+:root[data-reduce-motion] .grid-pane.just-failed .pane-signal::after {
+  animation: none;
+  opacity: 0.6;
+}
+
+:root[data-reduce-motion] .session-row.just-completed,
+:root[data-reduce-motion] .session-row.just-failed {
+  animation: none;
+  background-color: color-mix(in srgb, var(--signal-accent) 18%, transparent);
 }
 
 .registry-warning {
@@ -4823,6 +4854,38 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
 .quick-open-backdrop {
   align-items: flex-start;
   padding-top: 11vh;
+}
+
+/*
+ * Overlays enter, they do not pop: the backdrop fades and the surface settles from 96%. Enter only —
+ * closing stays instant, since a dismissed dialog should get out of the way, not perform.
+ */
+.modal-backdrop {
+  animation: overlay-in var(--motion-duration-base) var(--ease-out);
+}
+
+.modal-backdrop > [role="dialog"],
+.context-menu,
+.native-graph-menu {
+  animation: surface-in var(--motion-duration-base) var(--ease-out);
+}
+
+.context-menu,
+.native-graph-menu {
+  transform-origin: top left;
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
 }
 
 .quick-open {
@@ -7251,4 +7314,13 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+:root[data-reduce-motion] *,
+:root[data-reduce-motion] *::before,
+:root[data-reduce-motion] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }

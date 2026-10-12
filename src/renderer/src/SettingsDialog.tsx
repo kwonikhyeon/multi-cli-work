@@ -734,6 +734,10 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
                   {captureNotice}
                 </p>
               ) : null}
+              {checkboxRow("애니메이션 줄이기", "settings-reduce-motion", settings.general.reduceMotion, (next) => ({
+                general: { reduceMotion: next },
+              }))}
+              <p className="settings-hint">Windows의 애니메이션 효과가 꺼져 있으면 이 설정과 무관하게 줄입니다.</p>
             </>
           ) : null}
           {tab === "terminal" ? (

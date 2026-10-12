@@ -4358,6 +4358,21 @@ describe("folder colour", () => {
     await waitFor(() => expect(folderRow("Beta")).toHaveClass("selected"));
   });
 
+  it("marks the document for reduced motion while the setting is on", async () => {
+    const harness = createApi({ projects: [atlas], sessions: [powershellSession] });
+    window.multiCliWork = harness.api;
+    const { unmount } = render(<App />);
+    await screen.findByRole("button", { name: "Atlas 폴더 선택" });
+    expect(document.documentElement).not.toHaveAttribute("data-reduce-motion");
+
+    act(() => harness.emitSettings({ ...DEFAULT_SETTINGS, general: { ...DEFAULT_SETTINGS.general, reduceMotion: true } }));
+    await waitFor(() => expect(document.documentElement).toHaveAttribute("data-reduce-motion"));
+
+    act(() => harness.emitSettings(DEFAULT_SETTINGS));
+    await waitFor(() => expect(document.documentElement).not.toHaveAttribute("data-reduce-motion"));
+    unmount();
+  });
+
   it("keeps the working rail and approval alert visible together, expanded and collapsed", async () => {
     const working: TerminalSessionView = { ...powershellSession, status: "working" };
     const approval: TerminalSessionView = {

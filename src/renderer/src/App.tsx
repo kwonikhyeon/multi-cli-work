@@ -11,6 +11,7 @@ import type { WorkspaceShellInfo, WorkspaceSnapshot } from "@shared/workspace-ty
 import { pathStyleFor, resolveShellRefForPath, shellLinkKey } from "@shared/workspace-path";
 import type { GitWorkspaceView, SharedWorktree } from "@shared/worktree-types";
 import { FolderX, RefreshCw, SquareTerminal, TriangleAlert } from "lucide-react";
+import { MotionConfig } from "motion/react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { DiffView } from "./DiffView";
 import { FanOutDialog } from "./FanOutDialog";
@@ -593,6 +594,13 @@ export function App() {
       unsubscribe();
     };
   }, []);
+
+  // index.css pairs every reduced-motion rule with a :root[data-reduce-motion] twin; MotionConfig below covers motion/react.
+  const reduceMotion = appSettings.general.reduceMotion;
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-reduce-motion", reduceMotion);
+    return () => document.documentElement.removeAttribute("data-reduce-motion");
+  }, [reduceMotion]);
 
   // Editing `agents.json` happens in someone else's editor, so there is no save to listen for.
   // Coming back to the window is the one moment we know to look again.
@@ -1992,6 +2000,7 @@ export function App() {
   };
 
   return (
+    <MotionConfig reducedMotion={reduceMotion ? "always" : "user"}>
     <SessionSignalsContext.Provider value={sessionSignals.map}>
     <div className="app-frame">
       <TitleBar
@@ -2691,5 +2700,6 @@ export function App() {
     <Toaster />
     </div>
     </SessionSignalsContext.Provider>
+    </MotionConfig>
   );
 }

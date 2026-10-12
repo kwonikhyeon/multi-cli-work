@@ -339,7 +339,7 @@ export function validateSettingsPatch(value: unknown): AppSettingsPatch {
   if (raw.general !== undefined) {
     const general = exactObject(
       raw.general,
-      ["closeToTray", "autoResumeSessions", "autoCheckUpdates", "summonShortcut"],
+      ["closeToTray", "autoResumeSessions", "autoCheckUpdates", "summonShortcut", "reduceMotion"],
       "Settings general",
     );
     patch.general = {};
@@ -349,6 +349,9 @@ export function validateSettingsPatch(value: unknown): AppSettingsPatch {
     }
     if (general.autoCheckUpdates !== undefined) {
       patch.general.autoCheckUpdates = booleanValue(general.autoCheckUpdates, "Settings autoCheckUpdates");
+    }
+    if (general.reduceMotion !== undefined) {
+      patch.general.reduceMotion = booleanValue(general.reduceMotion, "Settings reduceMotion");
     }
     if (general.summonShortcut !== undefined) {
       const shortcut = general.summonShortcut;

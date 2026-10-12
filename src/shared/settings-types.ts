@@ -21,6 +21,8 @@ export interface GeneralSettings {
   summonShortcut: string | null;
   /** 세션이 보고하는 진행률(OSC 9;4, jk progress)을 작업표시줄 아이콘에도 띄운다. */
   taskbarProgress: boolean;
+  /** OS 설정과 별개로 앱 애니메이션을 줄인다. OS가 줄이라고 하면 이 값과 무관하게 줄인다. */
+  reduceMotion: boolean;
 }
 
 export interface TerminalSettings {
@@ -166,7 +168,7 @@ const MAX_FILE_OPEN_WITH_ENTRIES = 200;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   language: "ko",
-  general: { closeToTray: true, autoResumeSessions: true, autoCheckUpdates: true, summonShortcut: null, taskbarProgress: true },
+  general: { closeToTray: true, autoResumeSessions: true, autoCheckUpdates: true, summonShortcut: null, taskbarProgress: true, reduceMotion: false },
   terminal: {
     fontFamily: '"Cascadia Code", "Cascadia Mono", Consolas, monospace',
     fontSize: 13,
@@ -338,6 +340,7 @@ export function parseSettings(value: unknown): AppSettings {
         general.summonShortcut.length <= MAX_ACCELERATOR_LENGTH
           ? general.summonShortcut
           : null,
+      reduceMotion: readBoolean(general.reduceMotion, defaults.general.reduceMotion),
     },
     terminal: {
       fontFamily: readText(terminal.fontFamily, defaults.terminal.fontFamily),

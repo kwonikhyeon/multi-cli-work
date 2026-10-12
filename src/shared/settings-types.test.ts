@@ -31,6 +31,7 @@ describe("parseSettings", () => {
       autoCheckUpdates: true,
       summonShortcut: null,
       taskbarProgress: true,
+      reduceMotion: false,
     });
     expect(DEFAULT_SETTINGS.notifications).toEqual({
       desktop: true,
