@@ -1312,7 +1312,9 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
     await explorer.getByRole("tab", { name: "파일", exact: true }).click();
     await explorer.getByRole("button", { name: "파일 목록 새로고침" }).click();
     for (const name of ["preview-a", "preview-b"]) {
-      await explorer.getByRole("button", { name: `${name}.html`, exact: true }).click();
+      // A row opens with the OS by default; the in-app preview is behind the context menu.
+      await explorer.getByRole("button", { name: `${name}.html`, exact: true }).click({ button: "right" });
+      await page.getByRole("menuitem", { name: "앱에서 열기" }).click();
       await expect(page.getByRole("region", { name: `${name}.html html 미리보기` })).toBeVisible();
     }
     const previews = () => app.evaluate(({ BrowserWindow, WebContentsView }) =>
