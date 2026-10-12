@@ -4380,7 +4380,7 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
 
 .workspace-heading {
   display: flex;
-  flex: 0 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   align-items: center;
   gap: 16px;
