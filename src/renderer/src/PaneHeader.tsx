@@ -1,11 +1,12 @@
 import type { AgentView } from "@shared/agent-types";
 import type { TerminalSessionView } from "@shared/api-types";
-import type { SessionIndicators, SessionProgress, TerminalStatus } from "@shared/terminal-types";
+import type { SessionIndicators, SessionProgress } from "@shared/terminal-types";
 import {
   Briefcase,
   CircleStop,
   Folder,
   GitBranch,
+  LoaderCircle,
   Maximize2,
   Minimize2,
   RotateCcw,
@@ -194,6 +195,12 @@ export function PaneHeader({
           aria-label={statusLabels[session.status]}
         />
         {agent ? <AgentIcon agent={agent} size={13} className={agentAccentClass(agent)} /> : null}
+        {session.status === "working" ? (
+          <span className="pane-working-badge">
+            <LoaderCircle size={11} aria-hidden="true" />
+            {statusLabels.working}
+          </span>
+        ) : null}
         {renaming ? (
           <SessionNameInput initialName={label} onSubmit={onRename} onCancel={onCancelRename} />
         ) : (
@@ -273,17 +280,16 @@ export function PaneHeader({
           </button>
         </div>
       </div>
-      <PaneProgress status={session.status} progress={indicators?.progress ?? null} />
+      <PaneProgress progress={indicators?.progress ?? null} />
     </header>
   );
 }
 
 /**
- * A 2px line along the bottom of the header. A reported progress fills it to its value (or runs
- * indeterminate); with none reported, a working session gets a faint shimmer so a glance across the
- * grid tells busy panes from waiting ones.
+ * Reported progress keeps its own meaning. The activity frame and badge show that a session is
+ * working even without a progress report, so this line never invents a percentage.
  */
-function PaneProgress({ status, progress }: { status: TerminalStatus; progress: SessionProgress | null }) {
+function PaneProgress({ progress }: { progress: SessionProgress | null }) {
   if (progress) {
     const determinate = progress.value !== null && progress.state !== "indeterminate";
     return (
@@ -299,10 +305,5 @@ function PaneProgress({ status, progress }: { status: TerminalStatus; progress: 
       </div>
     );
   }
-  if (status !== "working") return null;
-  return (
-    <div className="pane-progress pane-progress-working" aria-hidden="true">
-      <div className="pane-progress-fill" />
-    </div>
-  );
+  return null;
 }

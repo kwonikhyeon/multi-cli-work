@@ -80,6 +80,7 @@
   --motion-duration-base: 180ms;
   --motion-duration-slow: 280ms;
   --motion-duration-signal: 1600ms;
+  --session-activity-cycle: 1600ms;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
@@ -3075,6 +3076,43 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
   background: var(--quiet);
 }
 
+/* Use ::before for activity; ::after belongs to the drag insertion marker. */
+.project-sidebar .session-row.status-working {
+  position: relative;
+}
+
+.project-sidebar .session-row.status-working:not(.current):not(:hover) {
+  background: color-mix(in srgb, var(--teal) 8%, transparent);
+}
+
+.project-sidebar .session-row.status-working::before {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--teal) 20%, var(--text) 50%, var(--teal) 80%);
+  background-size: 100% 250%;
+  animation: session-row-activity var(--session-activity-cycle) linear infinite;
+  content: "";
+  pointer-events: none;
+}
+
+.project-sidebar .session-row.status-working .session-status {
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, var(--teal) 45%, transparent);
+  border-radius: 4px;
+  color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 12%, var(--sidebar));
+  font: var(--type-caption-semibold);
+}
+
+@keyframes session-row-activity {
+  from { background-position: 0 200%; }
+  to { background-position: 0 0; }
+}
+
 .session-name,
 .session-detail,
 .session-status {
@@ -3417,8 +3455,8 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
  * the sidebar. Same overlay trick as the focus ring, on ::before so the ring paints over it and a
  * focused pane still reads as focused.
  *
- * Only the three statuses that are actually news are here. 진행 중 is teal, which is the focus
- * colour, and 대기/종료 are the resting states — drawing those would make every pane a frame.
+ * Waiting and errors use the outer frame. Working has a separate, inset activity frame so the
+ * static focus ring and the moving work indicator can both be read at once.
  */
 .grid-pane.status-awaiting-input {
   --session-accent: var(--violet);
@@ -3456,9 +3494,81 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
   }
 }
 
+/* Only the thin edge strips move, rather than a gradient as large as the terminal surface. */
+.pane-activity {
+  position: absolute;
+  z-index: 1;
+  overflow: hidden;
+  inset: 3px;
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--teal) 65%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--teal) 16%, transparent);
+  pointer-events: none;
+}
+
+.pane-activity-edge {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.pane-activity-edge::before {
+  position: absolute;
+  background: linear-gradient(90deg, transparent, var(--teal), var(--text), var(--teal), transparent);
+  animation: pane-activity-horizontal var(--session-activity-cycle) linear infinite;
+  content: "";
+}
+
+.pane-activity-top,
+.pane-activity-bottom {
+  right: 0;
+  left: 0;
+  height: 3px;
+}
+
+.pane-activity-top { top: 0; }
+.pane-activity-bottom { bottom: 0; }
+
+.pane-activity-top::before,
+.pane-activity-bottom::before {
+  width: 40%;
+  height: 100%;
+}
+
+.pane-activity-right,
+.pane-activity-left {
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.pane-activity-right { right: 0; }
+.pane-activity-left { left: 0; }
+
+.pane-activity-right::before,
+.pane-activity-left::before {
+  width: 100%;
+  height: 40%;
+  background: linear-gradient(180deg, transparent, var(--teal), var(--text), var(--teal), transparent);
+  animation-name: pane-activity-vertical;
+}
+
+.pane-activity-right::before { animation-delay: -400ms; }
+.pane-activity-bottom::before { animation-delay: -800ms; animation-direction: reverse; }
+.pane-activity-left::before { animation-delay: -1200ms; animation-direction: reverse; }
+
+@keyframes pane-activity-horizontal {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+@keyframes pane-activity-vertical {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(250%); }
+}
+
 /*
- * The pane's signal layer: a glow that fades once when a turn ends or the session fails. Working is
- * already shown by .pane-progress under the header. Opacity only, so the terminal never repaints.
+ * The pane's signal layer: a glow that fades once when a turn ends or the session fails.
+ * Opacity only, so the terminal never repaints.
  */
 .pane-signal {
   position: absolute;
@@ -3694,9 +3804,59 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
 
 .pane-header-main {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 6px;
   padding: 2px 4px 2px 8px;
+}
+
+.grid-pane.status-working > .pane-header {
+  background: color-mix(in srgb, var(--teal) 10%, var(--bg));
+}
+
+.pane-working-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, var(--teal) 55%, transparent);
+  border-radius: 4px;
+  color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 15%, var(--bg));
+  font: var(--type-caption-semibold);
+  white-space: nowrap;
+}
+
+.pane-working-badge svg {
+  flex: 0 0 auto;
+  animation: pane-working-spin var(--session-activity-cycle) linear infinite;
+}
+
+@keyframes pane-working-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane-activity-edge::before {
+    display: none;
+    animation: none;
+  }
+
+  .pane-working-badge svg,
+  .project-sidebar .session-row.status-working::before {
+    animation: none;
+  }
+}
+
+:root[data-reduce-motion] .pane-activity-edge::before {
+  display: none;
+  animation: none;
+}
+
+:root[data-reduce-motion] .pane-working-badge svg,
+:root[data-reduce-motion] .project-sidebar .session-row.status-working::before {
+  animation: none;
 }
 
 /*
@@ -3776,8 +3936,7 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
 }
 
 /*
- * The progress line rides the header's bottom border: a reported progress fills it, a working
- * session with nothing to report gets a faint sweep, so busy panes stand out across a full grid.
+ * The progress line rides the header's bottom border and only shows reported progress.
  */
 .pane-progress {
   position: absolute;
@@ -3809,19 +3968,13 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
   width: 100%;
 }
 
-.pane-progress-indeterminate .pane-progress-fill,
-.pane-progress-working .pane-progress-fill {
+.pane-progress-indeterminate .pane-progress-fill {
   width: 35%;
   animation: pane-progress-sweep 1.6s ease-in-out infinite;
 }
 
 .pane-progress-indeterminate .pane-progress-fill {
   background: linear-gradient(90deg, transparent, var(--progress-color) 30%, var(--progress-color) 70%, transparent);
-}
-
-.pane-progress-working .pane-progress-fill {
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--teal) 70%, transparent), transparent);
-  animation-duration: 2.4s;
 }
 
 @keyframes pane-progress-sweep {
@@ -3835,8 +3988,7 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
 
 /* The global rule only freezes an animation on its last frame — off screen, here. Show a still bar. */
 @media (prefers-reduced-motion: reduce) {
-  .pane-progress-indeterminate .pane-progress-fill,
-  .pane-progress-working .pane-progress-fill {
+  .pane-progress-indeterminate .pane-progress-fill {
     width: 100%;
     animation: none;
     transform: none;
@@ -3844,8 +3996,7 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
   }
 }
 
-:root[data-reduce-motion] .pane-progress-indeterminate .pane-progress-fill,
-:root[data-reduce-motion] .pane-progress-working .pane-progress-fill {
+:root[data-reduce-motion] .pane-progress-indeterminate .pane-progress-fill {
   width: 100%;
   animation: none;
   transform: none;

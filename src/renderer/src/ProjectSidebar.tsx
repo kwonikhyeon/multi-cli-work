@@ -47,7 +47,7 @@ import { RemoteHostsSection } from "./RemoteHostsSection";
 import { UpdateBadge } from "./UpdateBadge";
 import { AgentIcon, GitHubIcon, TeamsIcon } from "./brand-icons";
 import { DocumentPaneIcon, paneRowClass, type DocumentPane, type PaneRow } from "./pane-items";
-import { findAgent, projectName, sessionLabel } from "./session-labels";
+import { findAgent, projectName, sessionLabel, statusLabels } from "./session-labels";
 import { isSessionDrag, readSessionDrag, startSessionDrag } from "./session-drag";
 import type { SessionPanelItem, SessionScope, SessionScopeTarget } from "./session-panel";
 import {
@@ -656,6 +656,9 @@ export function ProjectSidebar({
             <DocumentPaneIcon kind={row.document} size={13} />
           )}
           <span className="session-name">{row.label}</span>
+          {row.kind === "session" && row.status === "working" ? (
+            <span className="session-status">{statusLabels.working}</span>
+          ) : null}
           {row.detail ? <span className="session-detail">{row.detail}</span> : null}
         </button>
         <button

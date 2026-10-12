@@ -106,6 +106,28 @@ function renderGrid(overrides: Partial<Parameters<typeof WorkspaceGrid>[0]> = {}
 afterEach(cleanup);
 
 describe("WorkspaceGrid", () => {
+  it("updates activity and progress independently without replacing the terminal or focus", () => {
+    const session = makeSession("session-1", { status: "working" });
+    const { container, props, rerender } = renderGrid({
+      slots: [sessionSlot(session)],
+      sessionIndicators: { [session.id]: { progress: { state: "normal", value: 40 }, chips: [] } },
+    });
+    const terminal = screen.getByTestId("terminal-session-1");
+    expect(container.querySelector(".pane-activity")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByText("작업 중")).toHaveClass("pane-working-badge");
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "40");
+
+    for (const status of ["awaiting-input", "awaiting-approval", "error", "exited", "idle", "starting", "working"] as const) {
+      const next = { ...session, status };
+      rerender(<WorkspaceGrid {...props} slots={[sessionSlot(next)]} allSessions={[next]} />);
+      expect(container.querySelector(".grid-pane")).toHaveClass(`status-${status}`, "pane-focused");
+      expect(container.querySelector(".pane-activity") !== null).toBe(status === "working");
+      expect(container.querySelector(".pane-working-badge") !== null).toBe(status === "working");
+      expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "40");
+      expect(screen.getByTestId("terminal-session-1")).toBe(terminal);
+    }
+  });
+
   it("draws the layout it is given and puts each pane in its own area", () => {
     const layout = layoutById("cols:1-1-2")!;
     const sessions = [makeSession("session-1"), makeSession("session-2"), makeSession("session-3")];

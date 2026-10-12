@@ -73,13 +73,15 @@ describe("PaneHeader indicators", () => {
     expect(bar.hasAttribute("aria-valuenow")).toBe(false);
   });
 
-  it("shimmers while the session works and nothing reports progress, and shows nothing when it is idle", () => {
+  it("shows a working badge without inventing progress, and removes it when idle", () => {
     const { container } = renderHeader(makeSession({ status: "working" }));
-    expect(container.querySelector(".pane-progress-working")).not.toBeNull();
+    expect(screen.getByText("작업 중")).toHaveClass("pane-working-badge");
+    expect(container.querySelector(".pane-progress")).toBeNull();
     expect(screen.queryByRole("progressbar")).toBeNull();
     cleanup();
     const idle = renderHeader(makeSession({ status: "idle" }));
     expect(idle.container.querySelector(".pane-progress")).toBeNull();
+    expect(screen.queryByText("작업 중")).toBeNull();
   });
 
   it("shows the pinned chips in order with their colour", () => {

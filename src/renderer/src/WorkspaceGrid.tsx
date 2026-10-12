@@ -378,8 +378,15 @@ export function WorkspaceGrid({
               onTerminalFocused={onTerminalFocused}
               onOpenFileLink={(link, position) => onOpenFileLink?.(session.id, link, position)}
             />
-            {/* The working bar and the completion glow. ::before and ::after already carry the
-                status frame and the focus ring, so the signal gets an element of its own. */}
+            {session.status === "working" ? (
+              <span className="pane-activity" aria-hidden="true">
+                <span className="pane-activity-edge pane-activity-top" />
+                <span className="pane-activity-edge pane-activity-right" />
+                <span className="pane-activity-edge pane-activity-bottom" />
+                <span className="pane-activity-edge pane-activity-left" />
+              </span>
+            ) : null}
+            {/* Completion and failure keep their own layer above the activity frame. */}
             <span className="pane-signal" aria-hidden="true" />
           </section>
         );
