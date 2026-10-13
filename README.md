@@ -23,6 +23,10 @@
 
 ## 미리보기
 
+<p align="center"><img src="docs/workspace-isometric.svg" alt="워크스페이스 분해도 — 앱 창 · 세션 패널 · 슬롯 그리드 · 알림 네 층" width="100%"></p>
+
+<p align="center"><em>한 창을 네 층으로 띄워 본 모습. 바닥의 앱 창 위에 세션 패널과 슬롯 그리드가 놓이고, 승인 대기 세션의 알림이 그 위에 뜬다.</em></p>
+
 <p align="center"><img src="docs/mockup-workspace.svg" alt="메인 화면 — 폴더 트리 · 세로 열 그리드 · 문서 패인 · 승인 대기 알림" width="100%"></p>
 
 <p align="center"><em>왼쪽에 작업공간·숨김과 업무 프로젝트·폴더·세션, 오른쪽에 그 폴더의 패인이 세로 열로. 가운데 열만 2행으로 나뉘어 있고, 맨 오른쪽은 문서 패인이다. 화면에 없는 세션이 기다리기 시작하면 알림이 뜬다.</em></p>
