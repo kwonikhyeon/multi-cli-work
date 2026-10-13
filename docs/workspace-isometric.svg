@@ -5,6 +5,42 @@
     </linearGradient>
     <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="9"/></filter>
   </defs>
+  <!-- 10s loop: assembled -> layers lift apart -> notification + labels -> settle back.
+       Without CSS animation (or with reduced motion) the exploded state below is what shows. -->
+  <style>
+    .a-grid, .a-side, .a-toast, .a-shadow, .a-guide, .a-label {
+      animation: 10s cubic-bezier(.45, 0, .2, 1) infinite both;
+    }
+    .a-grid { animation-name: lift-grid }
+    .a-side { animation-name: lift-side }
+    .a-shadow { animation-name: fade-lift }
+    .a-guide { animation-name: fade-hold }
+    .a-label { animation-name: fade-hold }
+    .a-toast { animation-name: toast }
+    @keyframes lift-grid {
+      0%, 10% { transform: translate(0, 100px) }
+      26%, 82% { transform: translate(0, 0) }
+      95%, 100% { transform: translate(0, 100px) }
+    }
+    @keyframes lift-side {
+      0%, 14% { transform: translate(0, 220px) }
+      32%, 80% { transform: translate(0, 0) }
+      94%, 100% { transform: translate(0, 220px) }
+    }
+    @keyframes fade-lift { 0%, 10% { opacity: 0 } 30%, 80% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes fade-hold { 0%, 36% { opacity: 0 } 46%, 76% { opacity: 1 } 80%, 100% { opacity: 0 } }
+    @keyframes toast {
+      0%, 34% { opacity: 0; transform: translate(0, -28px) }
+      40%, 76% { opacity: 1; transform: translate(0, 0) }
+      80%, 100% { opacity: 0; transform: translate(0, -28px) }
+    }
+    .pulse { animation: pulse 1.8s ease-in-out infinite }
+    .pulse-fast { animation: pulse 1.1s ease-in-out infinite }
+    @keyframes pulse { 0%, 100% { opacity: .95 } 50% { opacity: .3 } }
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important }
+    }
+  </style>
   <rect x="0.5" y="0.5" width="1279" height="749" rx="14" fill="url(#bg)" stroke="#343b38"/>
 
   <text x="36" y="48" font-size="11" font-weight="700" fill="#717b76" letter-spacing="1.2">WORKSPACE · EXPLODED VIEW</text>
@@ -32,18 +68,21 @@
     <rect x="12" y="44" width="210" height="484" rx="8"/>
     <rect x="234" y="44" width="654" height="484" rx="8"/>
   </g></g>
-  <g transform="matrix(0.48 0.28 -0.48 0.28 560 310)" filter="url(#soft)" fill="#000" opacity="0.5"><rect x="18" y="54" width="210" height="484" rx="10"/></g><g transform="matrix(0.48 0.28 -0.48 0.28 560 310)" filter="url(#soft)" fill="#000" opacity="0.5"><rect x="240" y="54" width="654" height="484" rx="10"/></g>
+  <g class="a-shadow"><g transform="matrix(0.48 0.28 -0.48 0.28 560 310)" filter="url(#soft)" fill="#000" opacity="0.5"><rect x="18" y="54" width="210" height="484" rx="10"/></g><g transform="matrix(0.48 0.28 -0.48 0.28 560 310)" filter="url(#soft)" fill="#000" opacity="0.5"><rect x="240" y="54" width="654" height="484" rx="10"/></g></g>
+  <g class="a-guide">
   <line x1="544.48" y1="105.68" x2="544.48" y2="325.68" stroke="#717b76" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/><line x1="646.32" y1="164.48" x2="646.32" y2="384.48" stroke="#717b76" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/><line x1="309.76" y1="241.2" x2="309.76" y2="461.2" stroke="#717b76" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/><line x1="411.6" y1="300" x2="411.6" y2="520" stroke="#717b76" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/>
   <line x1="652.14" y1="287.84" x2="652.14" y2="387.84" stroke="#717b76" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/><line x1="969.31" y1="470.96" x2="969.31" y2="570.96" stroke="#717b76" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/><line x1="417.42" y1="423.36" x2="417.42" y2="523.36" stroke="#717b76" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/><line x1="734.59" y1="606.48" x2="734.59" y2="706.48" stroke="#717b76" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/>
+  </g>
 
   <!-- slot grid (lower, front) -->
+  <g class="a-grid">
   <polygon points="417.42,423.36 490.17,465.36 490.17,471.36 417.42,429.36" fill="#0e1110"/><polygon points="724.89,329.84 490.17,465.36 490.17,471.36 724.89,335.84" fill="#0e1110" opacity="0.7"/><polygon points="613.35,398.72 686.09,440.72 686.09,446.72 613.35,404.72" fill="#0e1110"/><polygon points="801.51,374.08 686.09,440.72 686.09,446.72 801.51,380.08" fill="#0e1110" opacity="0.7"/><polygon points="494.05,467.6 566.79,509.6 566.79,515.6 494.05,473.6" fill="#0e1110"/><polygon points="682.21,442.96 566.79,509.6 566.79,515.6 682.21,448.96" fill="#0e1110" opacity="0.7"/><polygon points="570.67,511.84 643.41,553.84 643.41,559.84 570.67,517.84" fill="#0e1110"/><polygon points="878.13,418.32 643.41,553.84 643.41,559.84 878.13,424.32" fill="#0e1110" opacity="0.7"/><polygon points="647.29,556.08 734.59,606.48 734.59,612.48 647.29,562.08" fill="#0e1110"/><polygon points="969.31,470.96 734.59,606.48 734.59,612.48 969.31,476.96" fill="#0e1110" opacity="0.7"/>
   <g transform="matrix(0.48 0.28 -0.48 0.28 560 210)">
   <rect x="234" y="44" width="150" height="484" rx="7" fill="#1a1e1d" stroke="#343b38" stroke-width="1.2"/>
   <path d="M234 51a7 7 0 0 1 7-7h136a7 7 0 0 1 7 7v17H234z" fill="#aa8ccc" opacity="0.16"/>
   <line x1="234" y1="68" x2="384" y2="68" stroke="#343b38"/>
   <text x="244" y="60" font-size="10.5" font-weight="600" fill="#e7ebe8">Claude Code 1</text>
-  <text x="244" y="91" font-size="10" font-family="Consolas, monospace" fill="#4fb7a4">❯ 테스트 돌려줘</text><rect x="244" y="99" width="118" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="244" y="116" width="92" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="244" y="133" width="104" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><text x="244" y="159" font-size="10" font-family="Consolas, monospace" fill="#73b987">✓ 128 passed</text><rect x="244" y="167" width="70" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="244" y="184" width="112" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><rect x="244" y="201" width="86" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><text x="244" y="227" font-size="10" font-family="Consolas, monospace" fill="#4fb7a4">● 작업 중…</text><rect x="244" y="235" width="96" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><rect x="244" y="252" width="120" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="244" y="269" width="64" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><rect x="389" y="41" width="156" height="244" rx="10" fill="none" stroke="#d8a24a" stroke-width="2.4" opacity="0.9"/>
+  <text x="244" y="91" font-size="10" font-family="Consolas, monospace" fill="#4fb7a4">❯ 테스트 돌려줘</text><rect x="244" y="99" width="118" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="244" y="116" width="92" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="244" y="133" width="104" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><text x="244" y="159" font-size="10" font-family="Consolas, monospace" fill="#73b987">✓ 128 passed</text><rect x="244" y="167" width="70" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="244" y="184" width="112" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><rect x="244" y="201" width="86" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><text x="244" y="227" font-size="10" font-family="Consolas, monospace" fill="#4fb7a4">● 작업 중…</text><rect x="244" y="235" width="96" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><rect x="244" y="252" width="120" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="244" y="269" width="64" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><rect x="389" y="41" width="156" height="244" rx="10" fill="none" stroke="#d8a24a" stroke-width="2.4" opacity="0.9" class="pulse-fast"/>
   <rect x="392" y="44" width="150" height="238" rx="7" fill="#1a1e1d" stroke="#343b38" stroke-width="1.2"/>
   <path d="M392 51a7 7 0 0 1 7-7h136a7 7 0 0 1 7 7v17H392z" fill="#aa8ccc" opacity="0.16"/>
   <line x1="392" y1="68" x2="542" y2="68" stroke="#343b38"/>
@@ -53,7 +92,7 @@
   <path d="M392 297a7 7 0 0 1 7-7h136a7 7 0 0 1 7 7v17H392z" fill="#6ea8d8" opacity="0.16"/>
   <line x1="392" y1="314" x2="542" y2="314" stroke="#343b38"/>
   <text x="402" y="306" font-size="10.5" font-weight="600" fill="#e7ebe8">PowerShell</text>
-  <text x="402" y="337" font-size="10" font-family="Consolas, monospace" fill="#9aa49f">PS D:\dev> git st</text><rect x="402" y="345" width="104" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><rect x="402" y="362" width="80" height="7" rx="3.5" fill="#73b987" opacity="0.55"/><rect x="402" y="379" width="92" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><text x="402" y="405" font-size="10" font-family="Consolas, monospace" fill="#9aa49f">PS D:\dev> _</text><rect x="547" y="41" width="156" height="490" rx="10" fill="none" stroke="#aa8ccc" stroke-width="2.4" opacity="0.9"/>
+  <text x="402" y="337" font-size="10" font-family="Consolas, monospace" fill="#9aa49f">PS D:\dev> git st</text><rect x="402" y="345" width="104" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><rect x="402" y="362" width="80" height="7" rx="3.5" fill="#73b987" opacity="0.55"/><rect x="402" y="379" width="92" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><text x="402" y="405" font-size="10" font-family="Consolas, monospace" fill="#9aa49f">PS D:\dev> _</text><rect x="547" y="41" width="156" height="490" rx="10" fill="none" stroke="#aa8ccc" stroke-width="2.4" opacity="0.9" class="pulse"/>
   <rect x="550" y="44" width="150" height="484" rx="7" fill="#1a1e1d" stroke="#343b38" stroke-width="1.2"/>
   <path d="M550 51a7 7 0 0 1 7-7h136a7 7 0 0 1 7 7v17H550z" fill="#4fb7a4" opacity="0.16"/>
   <line x1="550" y1="68" x2="700" y2="68" stroke="#343b38"/>
@@ -69,10 +108,14 @@
     <rect x="720" y="196" width="156" height="78" rx="5" fill="#252b29" stroke="#2a302e"/>
     <rect x="730" y="208" width="96" height="7" rx="3.5" fill="#4fb7a4" opacity="0.55"/><rect x="730" y="225" width="120" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><rect x="730" y="242" width="80" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><rect x="730" y="259" width="104" height="7" rx="3.5" fill="#717b76" opacity="0.55"/>
     <rect x="720" y="292" width="150" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="720" y="309" width="126" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="720" y="326" width="142" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="720" y="343" width="88" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="720" y="360" width="0" height="7" rx="3.5" fill="#717b76" opacity="0.55"/><rect x="720" y="377" width="64" height="7" rx="3.5" fill="#e7ebe8" opacity="0.55"/><rect x="720" y="394" width="148" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/><rect x="720" y="411" width="120" height="7" rx="3.5" fill="#9aa49f" opacity="0.55"/></g>
+  </g>
+  <g class="a-toast">
   <g transform="matrix(0.48 0.28 -0.48 0.28 560 210)" filter="url(#soft)" fill="#000" opacity="0.5"><rect x="646" y="390" width="250" height="74" rx="10"/></g>
   <line x1="686.09" y1="395.6" x2="686.09" y2="495.6" stroke="#d8a24a" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/><line x1="807.33" y1="465.6" x2="807.33" y2="565.6" stroke="#d8a24a" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/><line x1="650.2" y1="416.32" x2="650.2" y2="516.32" stroke="#d8a24a" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/><line x1="771.44" y1="486.32" x2="771.44" y2="586.32" stroke="#d8a24a" stroke-width="1" stroke-dasharray="3 4" opacity="0.7"/>
+  </g>
 
   <!-- session panel (higher, back) -->
+  <g class="a-side">
   <polygon points="309.76,241.2 411.6,300 411.6,306 309.76,247.2" fill="#0e1110"/><polygon points="646.32,164.48 411.6,300 411.6,306 646.32,170.48" fill="#0e1110" opacity="0.7"/>
   <g transform="matrix(0.48 0.28 -0.48 0.28 560 90)">
   <rect x="12" y="44" width="210" height="484" rx="8" fill="#1c201f" stroke="#343b38" stroke-width="1.2"/>
@@ -92,8 +135,10 @@
   <rect x="20" y="490" width="194" height="26" rx="6" fill="none" stroke="#2a302e"/>
   <text x="30" y="507" font-size="10" font-family="Consolas, monospace" fill="#9aa49f">v1.46.0</text>
   <text x="204" y="507" font-size="10" fill="#717b76" text-anchor="end">최신 버전</text></g>
+  </g>
 
   <!-- notification -->
+  <g class="a-toast">
   <polygon points="650.2,416.32 771.44,486.32 771.44,491.32 650.2,421.32" fill="#3a2c12"/><polygon points="807.33,465.6 771.44,486.32 771.44,491.32 807.33,470.6" fill="#3a2c12" opacity="0.7"/>
   <g transform="matrix(0.48 0.28 -0.48 0.28 560 110)">
   <rect x="640" y="380" width="250" height="74" rx="10" fill="#252b29" stroke="#d8a24a" stroke-width="1.6"/>
@@ -103,8 +148,10 @@
   </g>
   <text x="688" y="408" font-size="12" font-weight="600" fill="#e7ebe8">Claude Code 2 · api-server</text>
   <text x="688" y="428" font-size="11" fill="#d8a24a">승인 대기 — 편집을 적용할까요?</text></g>
+  </g>
 
   <!-- callouts -->
+  <g class="a-label">
   
   <circle cx="807.33" cy="465.6" r="3" fill="#d8a24a"/>
   <polyline points="807.33,465.6 980,330 1000,330" fill="none" stroke="#d8a24a" stroke-width="1" opacity="0.8"/>
@@ -133,4 +180,5 @@
   <text x="48" y="534" font-size="11" font-weight="700" fill="#9aa49f" text-anchor="middle">1</text>
   <text x="68" y="531" font-size="14" font-weight="700" fill="#e7ebe8">앱 창</text>
   <text x="68" y="549" font-size="11" fill="#9aa49f">트레이 상주 · 재시작해도 복원</text>
+  </g>
 </svg>
