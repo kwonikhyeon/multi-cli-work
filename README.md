@@ -23,6 +23,10 @@
 
 ## 미리보기
 
+https://github.com/user-attachments/assets/90ce9c52-e04a-43d2-a347-875fbcd846cf
+
+<p align="center"><em>60초 소개 영상 — 폴더 열기부터 세션 상태 표시, 그리드 레이아웃, <code>jk send</code>, 재시작 후 복원과 폰 원격까지.</em></p>
+
 <p align="center"><img src="docs/workspace-isometric.svg" alt="워크스페이스 분해도 — 앱 창 · 세션 패널 · 슬롯 그리드 · 알림 네 층" width="100%"></p>
 
 <p align="center"><em>접혀 있던 한 창이 네 층으로 펼쳐진다. 바닥의 앱 창 위에 세션 패널과 슬롯 그리드가 놓이고, 승인 대기 세션의 알림이 그 위에 뜬다.</em></p>
