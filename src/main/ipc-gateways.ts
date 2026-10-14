@@ -23,6 +23,8 @@ import type {
 import type { SessionIndicatorsUpdate } from "../shared/terminal-types";
 import type { UsageSnapshot } from "../shared/usage-types";
 import { type AppSettings, type AppSettingsPatch } from "../shared/settings-types";
+import type { PcRootsInfo } from "../shared/pc-roots-types";
+import type { ProfileGateway } from "./profile/profile-gateway";
 import type { FileExplorerTarget, FileTreeEntry, WorkspaceChangedPaths, WorkspaceFileContent } from "../shared/file-explorer-types";
 import type { EditorPosition } from "./providers/provider-launch";
 import type {
@@ -337,4 +339,11 @@ export interface MainIpcDependencies {
     get(): AppSettings;
     update(patch: AppSettingsPatch): Promise<AppSettings>;
   };
+  /** 이 PC의 dev·data·work·drive 루트 — 지정값이 탐지값을 이긴다. */
+  pcRoots: {
+    info(): PcRootsInfo;
+    redetect(): PcRootsInfo;
+  };
+  /** 설정 프로필 내보내기·불러오기(드라이브에 두고 PC 사이에 옮긴다). */
+  profile: ProfileGateway;
 }

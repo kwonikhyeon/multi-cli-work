@@ -127,6 +127,20 @@ describe("renderWorkProjectBrief", () => {
     expect(brief).toContain("문서 작업은 팀즈 폴더, 진행 관리는 노션을 기준으로 한다.");
   });
 
+  it("문서 폴더가 드라이브 아래면 팀즈 루트가 남아 있어도 드라이브 어휘와 git 금지 줄을 쓴다", () => {
+    const drive = path.join("G:", "내 드라이브");
+    const brief = renderWorkProjectBrief(
+      WORK_PROJECT,
+      [{ project: project("2", path.join(drive, "R_DOTORI")), role: "docs" }],
+      [],
+      { teamsSyncRoot: path.join("C:", "Teams"), driveRoot: drive },
+    );
+    expect(brief).toContain("## 문서 폴더 · Google Drive (공식 문서: 계획서·보고서·발표자료)");
+    expect(brief).toContain("`git init`·커밋을 하지 않고");
+    expect(brief).toContain("문서 작업은 드라이브 폴더, 진행 관리는 노션을 기준으로 한다.");
+    expect(brief).not.toContain("팀즈");
+  });
+
   it("팀즈 루트가 없으면 어디에도 팀즈라는 말이 없다", () => {
     const brief = renderWorkProjectBrief(
       { ...WORK_PROJECT, notionLinks: [] },

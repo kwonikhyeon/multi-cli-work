@@ -33,6 +33,8 @@ import { SessionContextMenu } from "./SessionContextMenu";
 import type { TerminalCommands } from "./TerminalPane";
 import { TitleBar } from "./TitleBar";
 import { buildTitleBarMenus, NEW_SESSION_PREFIX } from "./title-bar-menu";
+import { WorkProjectCreateDialog } from "./WorkProjectCreateDialog";
+import { sortWorkProjects } from "./work-project-order";
 import { WorkProjectDetailPage } from "./WorkProjectDetailPage";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { WorkspaceGrid } from "./WorkspaceGrid";
@@ -198,6 +200,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** 설정을 특정 탭으로 열 때만 값이 있다. */
   const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);
+  const [workProjectCreateOpen, setWorkProjectCreateOpen] = useState(false);
   const [diffView, setDiffView] = useState<DiffViewState | null>(null);
   /** Each folder's saved grid, keyed by `folderViewKeyOf`. */
   const [folderViews, setFolderViews] = useState<Record<string, SlotViewState>>({});
@@ -243,14 +246,12 @@ export function App() {
     );
   }, [snapshot]);
 
+  // 구분이 1순위, 그 안에서는 손으로 정한 순서 → 만든 순서(work-project-order.ts).
+  const workProjectCategories = appSettings.projects.categories;
   const workProjects = useMemo(() => {
     if (!workProjectRegistry) return [];
-    return Object.values(workProjectRegistry.workProjects).sort(
-      (left, right) =>
-        (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER) ||
-        left.name.localeCompare(right.name),
-    );
-  }, [workProjectRegistry]);
+    return sortWorkProjects(Object.values(workProjectRegistry.workProjects), workProjectCategories);
+  }, [workProjectRegistry, workProjectCategories]);
 
   /** 업무 프로젝트 id → 태그. 사이드바가 태그 한 겹을 얹는 근거다. 사라진 행은 그냥 빠진다. */
   const tagsByWorkProjectId = useMemo(
@@ -577,9 +578,12 @@ export function App() {
         window.multiCliWork.workProjects.list(),
         window.multiCliWork.projectTags.list(),
         window.multiCliWork.workspace.list(),
+        // 프로필 불러오기는 폴더 목록도 바꾼다.
+        window.multiCliWork.projects.list(),
       ])
-        .then(([workProjectList, projectTagList, workspaceSnapshot]) => {
+        .then(([workProjectList, projectTagList, workspaceSnapshot, projectSnapshot]) => {
           if (disposed) return;
+          setSnapshot(projectSnapshot);
           setWorkProjectRegistry(workProjectList);
           setProjectTags(projectTagList);
           setWorkspace(workspaceSnapshot);
@@ -986,17 +990,22 @@ export function App() {
     setActionError(null);
   };
 
-  const createWorkProject = async () => {
+  // 이름(구분 코드 접두어)과 드라이브 폴더를 함께 정해야 해서 대화상자로 받는다.
+  const createWorkProject = () => {
     setActionError(null);
+    setWorkProjectCreateOpen(true);
+  };
+
+  const handleWorkProjectsCreated = async (registry: WorkProjectRegistryV1, createdId: string | null) => {
+    setWorkProjectCreateOpen(false);
+    setWorkProjectRegistry(registry);
     try {
-      const before = new Set(Object.keys(workProjectRegistry?.workProjects ?? {}));
-      const registry = await window.multiCliWork.workProjects.create({ name: "새 프로젝트" });
-      setWorkProjectRegistry(registry);
-      const created = Object.values(registry.workProjects).find((workProject) => !before.has(workProject.id));
-      if (created) selectWorkProject(created.id);
+      // 드라이브 폴더를 문서 멤버로 등록했으면 폴더 목록도 바뀌었다.
+      setSnapshot(await window.multiCliWork.projects.list());
     } catch (error) {
       setActionError(errorMessage(error));
     }
+    if (createdId) selectWorkProject(createdId);
   };
 
   const moveProjectToWorkProject = async (projectId: string, workProjectId: string | null) => {
@@ -1195,6 +1204,15 @@ export function App() {
     }
   };
 
+  const reorderWorkProjects = async (orderedIds: string[]) => {
+    setActionError(null);
+    try {
+      setWorkProjectRegistry(await window.multiCliWork.workProjects.reorder(orderedIds));
+    } catch (error) {
+      setActionError(errorMessage(error));
+    }
+  };
+
   const reorderProjects = async (orderedIds: string[]) => {
     setActionError(null);
     try {
@@ -1218,23 +1236,28 @@ export function App() {
     );
   };
 
+  /** 폴더 항목의 경로가 바뀌었다(다시 연결·드라이브 전환) — 사라진 폴더 표시도 함께 걷는다. */
+  const applyRelinkedProject = (relinked: SharedProject) => {
+    setSnapshot((current) =>
+      current
+        ? {
+            ...current,
+            missingRootProjectIds: current.missingRootProjectIds.filter((id) => id !== relinked.id),
+            registry: {
+              ...current.registry,
+              projects: { ...current.registry.projects, [relinked.id]: relinked },
+            },
+          }
+        : current,
+    );
+  };
+
   const relinkProject = async (project: SharedProject) => {
     setActionError(null);
     try {
       const relinked = await window.multiCliWork.projects.relink(project.id);
       if (!relinked) return;
-      setSnapshot((current) =>
-        current
-          ? {
-              ...current,
-              missingRootProjectIds: current.missingRootProjectIds.filter((id) => id !== relinked.id),
-              registry: {
-                ...current.registry,
-                projects: { ...current.registry.projects, [relinked.id]: relinked },
-              },
-            }
-          : current,
-      );
+      applyRelinkedProject(relinked);
     } catch (error) {
       setActionError(errorMessage(error));
     }
@@ -1921,7 +1944,7 @@ export function App() {
     const terminal = editTargetId ? (terminalCommands.current.get(editTargetId) ?? null) : null;
     switch (id) {
       case "file.add-folder": void addProject(); break;
-      case "file.add-work-project": void createWorkProject(); break;
+      case "file.add-work-project": createWorkProject(); break;
       case "file.save": if (selectedFileTab) void saveFileTab(selectedFileTab.id); break;
       case "file.relink": relinkSelectedProject(); break;
       // Not window.close(): ✕ hides to the tray, 종료 goes through the session-stop confirmation.
@@ -2041,7 +2064,7 @@ export function App() {
         selectedWorkProjectId={activeView === "work-project" ? selectedWorkProjectId : null}
         onToggleWorkProject={toggleWorkProject}
         onSelectWorkProject={selectWorkProject}
-        onCreateWorkProject={() => void createWorkProject()}
+        onCreateWorkProject={createWorkProject}
         onMoveProjectToWorkProject={(projectId, workProjectId) => void moveProjectToWorkProject(projectId, workProjectId)}
         sessions={sessions}
         agents={agents}
@@ -2096,6 +2119,7 @@ export function App() {
         onCollapseAll={collapseAll}
         onExpandWorking={expandWorking}
         onReorderProjects={(orderedIds) => void reorderProjects(orderedIds)}
+        onReorderWorkProjects={(orderedIds) => void reorderWorkProjects(orderedIds)}
         onProjectContextMenu={(project, event) => {
           event.preventDefault();
           setContextMenu({ project, x: event.clientX, y: event.clientY });
@@ -2331,6 +2355,11 @@ export function App() {
               onRegistryChanged={setWorkProjectRegistry}
               onTagsChanged={setProjectTags}
               onMemberFolderAdded={handleMemberFolderAdded}
+              onProjectRelinked={applyRelinkedProject}
+              onOpenPcSettings={() => {
+                setSettingsTab("pc");
+                setSettingsOpen(true);
+              }}
               onRemoveWorkProject={() => {
                 const target = selectedWorkProject;
                 void confirm({
@@ -2589,6 +2618,15 @@ export function App() {
           items={quickOpenItems}
           onSelect={handleQuickOpenSelect}
           onClose={() => setQuickOpenVisible(false)}
+        />
+      ) : null}
+
+      {workProjectCreateOpen ? (
+        <WorkProjectCreateDialog
+          categories={appSettings.projects.categories}
+          defaultCategory={appSettings.projects.defaultCategory}
+          onDone={(registry, createdId) => void handleWorkProjectsCreated(registry, createdId)}
+          onClose={() => setWorkProjectCreateOpen(false)}
         />
       ) : null}
 

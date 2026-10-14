@@ -32,7 +32,10 @@ import type {
   WorktreeRemovalResult,
   WorktreeWorkspaceSnapshot,
 } from "./worktree-types";
-import type { AppSettings, AppSettingsPatch } from "./settings-types";
+import type { AppSettings, AppSettingsPatch, PcRootKey } from "./settings-types";
+import type { PcRootsInfo } from "./pc-roots-types";
+import type { ProfileExportResult, ProfileImportPreview, ProfileImportResult } from "./profile-types";
+import type { DriveCreateOptions, DriveOverview, DriveProjectStatus } from "./drive-types";
 import type { NotionLinkCheck, NotionTokenStatus } from "./notion-types";
 import type {
   RemoteAccessStatus,
@@ -339,7 +342,7 @@ export interface MultiCliWorkApi {
     /** Work project drag-to-sort; unlisted ids keep their relative position after the listed ones. */
     reorder(orderedIds: string[]): Promise<WorkProjectRegistryV1>;
     /**
-     * Opens the folder dialog (at the Teams sync root for "docs"), registers the folder as a
+     * Opens the folder dialog (docs: Drive root, else the legacy Teams root; repo: dev root), registers the folder as a
      * project and adds it as a member in one step. Null when the user cancels the dialog.
      */
     addMemberFolder(workProjectId: string, role: WorkProjectRole): Promise<WorkProjectMemberFolderAddResult | null>;
@@ -353,6 +356,40 @@ export interface MultiCliWorkApi {
     /** Opens the folder dialog and stores the choice; `clear` resets it. Null when cancelled. */
     chooseTeamsSyncRoot(): Promise<WorkProjectRegistryV1 | null>;
     clearTeamsSyncRoot(): Promise<WorkProjectRegistryV1>;
+  };
+  /** 이 PC의 dev·data·work·drive 루트. 지정값은 settings.json `pcRoots`에 산다. */
+  pcRoots: {
+    get(): Promise<PcRootsInfo>;
+    redetect(): Promise<PcRootsInfo>;
+    /** 폴더 대화상자로 지정한다. 취소하면 null. */
+    choose(key: PcRootKey): Promise<PcRootsInfo | null>;
+    /** 지정을 지워 자동 탐지로 되돌린다. */
+    clear(key: PcRootKey): Promise<PcRootsInfo>;
+  };
+  /** 설정 프로필 — 드라이브(`_config\multi-cli-work\profile.json`)에 두고 PC 사이에 손으로 옮긴다. */
+  profile: {
+    defaultPath(): Promise<string | null>;
+    /** 저장 위치를 묻고 내보낸다. 취소하면 null. */
+    export(): Promise<ProfileExportResult | null>;
+    /** 파일을 고르고 바뀔 내용을 미리 본다. 취소하면 null. */
+    preview(): Promise<ProfileImportPreview | null>;
+    /** 마지막으로 미리 본 프로필을 병합한다. 지우는 것은 없다. */
+    apply(): Promise<ProfileImportResult>;
+  };
+  /** Google Drive: 업무 프로젝트 ↔ 드라이브 최상위 폴더(이름이 같으면 연결). */
+  drive: {
+    overview(): Promise<DriveOverview>;
+    status(workProjectId: string): Promise<DriveProjectStatus>;
+    /** 같은 이름의 드라이브 폴더를 문서 폴더 멤버로 등록한다. */
+    link(workProjectId: string): Promise<WorkProjectMemberFolderAddResult>;
+    /** 드라이브에 폴더를 만들고(템플릿 선택) 문서 폴더 멤버로 등록한다. */
+    createFolder(workProjectId: string, options: DriveCreateOptions): Promise<WorkProjectMemberFolderAddResult>;
+    /** 업무 프로젝트가 없는 드라이브 폴더들로 업무 프로젝트를 만든다. 구분은 접두 코드로 정한다. */
+    importFolders(names: string[]): Promise<WorkProjectRegistryV1>;
+    /** 드라이브 밖 문서 폴더를 제안된 드라이브 폴더로 옮겨 단다. */
+    migrateDocs(workProjectId: string, projectId: string): Promise<SharedProject>;
+    /** 드라이브 폴더(또는 그 하위 폴더 하나)를 탐색기로 연다. */
+    reveal(workProjectId: string, subfolder?: string): Promise<void>;
   };
   /**
    * 업무 프로젝트 자유 태그(`~/.multi-cli-work/project-tags.json`). `workProjects`와 별도 파일에

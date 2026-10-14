@@ -13,7 +13,10 @@ import type {
 import type { ProjectCategorySetting } from "@shared/settings-types";
 import { AlertTriangle, BookOpen, Check, ExternalLink, FolderOpen, FolderPlus, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { withCategoryPrefix, prefixMismatch } from "@shared/category-code";
 import { GitHubIcon, TeamsIcon } from "./brand-icons";
+import { DocsFolderIcon } from "./docs-folder-icon";
+import { WorkProjectDriveCard } from "./WorkProjectDriveCard";
 import { subscribeNotionTokenStatus } from "./notion-token-status";
 import { projectName, relativeTime, sessionLabel, statusLabels } from "./session-labels";
 import { TagEditor } from "./TagEditor";
@@ -91,6 +94,10 @@ interface WorkProjectDetailPageProps {
   onSelectProject(projectId: string): void;
   onRegistryChanged(registry: WorkProjectRegistryV1): void;
   onMemberFolderAdded(result: WorkProjectMemberFolderAddResult): void;
+  /** 문서 폴더를 드라이브로 옮겨 단 뒤 바뀐 폴더 항목을 위로 올린다. */
+  onProjectRelinked(project: SharedProject): void;
+  /** 드라이브 루트를 찾지 못했을 때 설정의 PC 루트 탭을 연다. */
+  onOpenPcSettings(): void;
   onRemoveWorkProject(): void;
   onOpenNotion(url: string): void;
   onRevealProject(projectId: string): void;
@@ -112,6 +119,8 @@ export function WorkProjectDetailPage({
   onSelectProject,
   onRegistryChanged,
   onMemberFolderAdded,
+  onProjectRelinked,
+  onOpenPcSettings,
   onRemoveWorkProject,
   onOpenNotion,
   onRevealProject,
@@ -334,11 +343,11 @@ export function WorkProjectDetailPage({
     }
   };
 
-  const chooseTeamsRoot = async () => {
+  // 팀즈는 이전 설정으로만 남는다 — 문서는 드라이브로 옮겨 왔으니 새로 고르는 길은 두지 않는다.
+  const clearTeamsRoot = async () => {
     setSaveError(null);
     try {
-      const registry = await window.multiCliWork.workProjects.chooseTeamsSyncRoot();
-      if (registry) onRegistryChanged(registry);
+      onRegistryChanged(await window.multiCliWork.workProjects.clearTeamsSyncRoot());
     } catch (error) {
       setSaveError(errorMessage(error));
     }
@@ -348,7 +357,55 @@ export function WorkProjectDetailPage({
   // 값을 담은 select는 다음 저장 때 조용히 값을 바꿔 버린다.
   const categoryNames = categories.map((candidate) => candidate.name);
   const categoryOptions = categoryNames.includes(category) ? categoryNames : [category, ...categoryNames];
+  const categorySetting = categories.find((candidate) => candidate.name === category);
+  const suggestedName = withCategoryPrefix(workProject.name, categorySetting);
+  const showPrefixHint = prefixMismatch(workProject.name, categorySetting) && suggestedName !== workProject.name;
+  const repoMembers = members.filter((member) => member.role === "repo");
   const docsMembers = members.filter((member) => member.role === "docs");
+
+  const renderMember = ({ project, role }: { project: SharedProject; role: WorkProjectRole }) => (
+    <li key={project.id}>
+      <button
+        type="button"
+        className="member-open"
+        onClick={() => onSelectProject(project.id)}
+        aria-label={`${projectName(project)} 폴더 열기`}
+      >
+        {role === "docs" ? (
+          <DocsFolderIcon rootPath={project.rootPath} />
+        ) : (
+          <GitHubIcon size={14} className="brand-icon-github" />
+        )}
+        <span className="member-copy">
+          <span className="member-name">
+            {projectName(project)}
+            <span className="member-role">{role === "docs" ? "문서" : "레포"}</span>
+          </span>
+          <span className="member-path" title={project.rootPath}>
+            {project.rootPath}
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        className="icon-button"
+        onClick={() => onRevealProject(project.id)}
+        aria-label={`${projectName(project)} 파일 탐색기에서 열기`}
+        title="파일 탐색기에서 열기"
+      >
+        <FolderOpen size={14} />
+      </button>
+      <button
+        type="button"
+        className="icon-button"
+        onClick={() => void removeMember(project.id)}
+        aria-label={`${projectName(project)} 프로젝트에서 제외`}
+        title="프로젝트에서 제외 (폴더 목록에는 남음)"
+      >
+        <Trash2 size={14} />
+      </button>
+    </li>
+  );
 
   // The accent tracks the local `category` state, not the saved one, so the chip and the card edge
   // follow the select the moment it changes rather than only after the write lands.
@@ -357,14 +414,28 @@ export function WorkProjectDetailPage({
       className={`project-detail work-project-detail ${categoryAccentClass(category, categories)}`}
       aria-label="업무 프로젝트 상세"
     >
-      <div className="detail-grid">
-        <section className="detail-card detail-card-notes" aria-label="프로젝트 개요">
-          <h2>프로젝트 개요</h2>
-          {saveError ? (
-            <p className="detail-save-error" role="alert">
-              {saveError}
-            </p>
-          ) : null}
+      <header className="work-project-hero">
+        {categorySetting?.code ? (
+          <span className="work-project-code" aria-label={`구분 코드 ${categorySetting.code}`}>
+            {categorySetting.code}
+          </span>
+        ) : null}
+        <div className="work-project-hero-copy">
+          <h1>{workProject.name}</h1>
+          <p>
+            <span className="category-chip">{category}</span>
+            {workProject.status ? <span className="work-project-hero-status">{workProject.status}</span> : null}
+          </p>
+        </div>
+      </header>
+      {saveError ? (
+        <p className="detail-save-error" role="alert">
+          {saveError}
+        </p>
+      ) : null}
+      <div className="detail-grid work-project-grid">
+        <section className="detail-card" aria-label="프로젝트 개요">
+          <h2>기본 정보</h2>
           <div className="work-project-form">
             <label htmlFor={`wp-name-${workProject.id}`}>이름</label>
             <input
@@ -388,14 +459,32 @@ export function WorkProjectDetailPage({
                   void save({ category: event.target.value });
                 }}
               >
-                {categoryOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
+                {categoryOptions.map((option) => {
+                  const code = categories.find((candidate) => candidate.name === option)?.code;
+                  return (
+                    <option key={option} value={option}>
+                      {code ? `${code} · ${option}` : option}
+                    </option>
+                  );
+                })}
               </select>
-              <span className="category-chip">{category}</span>
             </div>
+            {showPrefixHint ? (
+              <p className="work-project-prefix-hint" role="note">
+                <span>
+                  이름 접두어가 구분 코드 <strong>{categorySetting?.code}</strong>와 다릅니다. 드라이브 폴더는 이름으로 찾습니다.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setName(suggestedName);
+                    void save({ name: suggestedName });
+                  }}
+                >
+                  {suggestedName}(으)로 바꾸기
+                </button>
+              </p>
+            ) : null}
             <label htmlFor={`wp-status-${workProject.id}`}>상태</label>
             <select
               id={`wp-status-${workProject.id}`}
@@ -414,224 +503,29 @@ export function WorkProjectDetailPage({
             <div role="group" aria-labelledby={`wp-tags-${workProject.id}`}>
               <TagEditor tags={tags} suggestions={tagSuggestions} onChange={(next) => void saveTags(next)} />
             </div>
-            <label id={`wp-notion-${workProject.id}`}>노션 페이지</label>
-            <div className="work-project-notion-list" role="group" aria-labelledby={`wp-notion-${workProject.id}`}>
-              {notionLinks.map((link, index) => {
-                const url = link.url.trim();
-                const check = url.length > 0 ? notionChecks[url] : undefined;
-                const checking = url.length > 0 && notionInFlight.has(url);
-                return (
-                  <div className="work-project-notion-row" key={index}>
-                    <input
-                      className="notion-label-input"
-                      type="text"
-                      value={link.label}
-                      placeholder={index === 0 ? "채널" : `${index}차년도`}
-                      aria-label={`노션 링크 ${index + 1} 라벨`}
-                      onChange={(event) => updateNotionLink(index, { label: event.target.value })}
-                      onBlur={flushNotionLinks}
-                    />
-                    <input
-                      type="text"
-                      value={link.url}
-                      placeholder="https://notion.so/…"
-                      aria-label={`노션 링크 ${index + 1} URL`}
-                      onChange={(event) => updateNotionLink(index, { url: event.target.value })}
-                      onBlur={flushNotionLinks}
-                    />
-                    {check ? (
-                      <span
-                        className={`notion-link-status ${check.state === "ok" ? "ok" : "warn"}`}
-                        role="img"
-                        aria-label={
-                          check.state === "ok"
-                            ? `노션 링크 ${index + 1} 접근 가능`
-                            : `노션 링크 ${index + 1} 접근 불가: ${check.message ?? ""}`
-                        }
-                        title={check.state === "ok" ? check.title ?? "통합이 이 페이지를 읽을 수 있습니다" : check.message ?? ""}
-                      >
-                        {check.state === "ok" ? <Check size={14} /> : <AlertTriangle size={14} />}
-                      </span>
-                    ) : (
-                      <span className="notion-link-status" aria-hidden="true" />
-                    )}
-                    <button
-                      type="button"
-                      className="icon-button"
-                      disabled={url.length === 0 || checking || notionTokenReady !== true}
-                      title={
-                        notionTokenReady === true
-                          ? url.length === 0
-                            ? "URL을 먼저 입력하세요"
-                            : "제목 다시 가져오기"
-                          : "설정 → 노션에서 통합 토큰을 먼저 입력하세요"
-                      }
-                      aria-label={`노션 링크 ${index + 1} 제목 조회`}
-                      onClick={() => void inspectNotionLink(index, url, true)}
-                    >
-                      <RefreshCw size={14} className={checking ? "spin" : undefined} />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button"
-                      disabled={url.length === 0}
-                      title={url.length > 0 ? "노션에서 열기" : "URL을 먼저 입력하세요"}
-                      aria-label={`노션 링크 ${index + 1} 열기`}
-                      onClick={() => onOpenNotion(url)}
-                    >
-                      <ExternalLink size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label={`노션 링크 ${index + 1} 삭제`}
-                      title="링크 삭제"
-                      onClick={() => setNotionLinks((current) => current.filter((_, at) => at !== index))}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                );
-              })}
-              <button
-                type="button"
-                className="work-project-notion-add"
-                onClick={() => setNotionLinks((current) => [...current, { label: "", url: "" }])}
-              >
-                <Plus size={13} />
-                <span>링크 추가</span>
-              </button>
-            </div>
-            {notionError ? (
-              <p className="detail-save-error" role="alert">
-                {notionError}
-              </p>
-            ) : null}
-            <label id={`wp-folders-${workProject.id}`}>참고 로컬 폴더</label>
-            <div className="work-project-local-list" role="group" aria-labelledby={`wp-folders-${workProject.id}`}>
-              {localFolders.map((folder, index) => (
-                <div className="work-project-local-row" key={index}>
-                  <input
-                    className="link-label-input"
-                    type="text"
-                    value={folder.label}
-                    placeholder="자료 폴더"
-                    aria-label={`참고 폴더 ${index + 1} 라벨`}
-                    onChange={(event) => updateLocalFolder(index, { label: event.target.value })}
-                    onBlur={flushLocalFolders}
-                  />
-                  <input
-                    type="text"
-                    value={folder.path}
-                    placeholder="D:\Work\참고자료"
-                    aria-label={`참고 폴더 ${index + 1} 경로`}
-                    onChange={(event) => updateLocalFolder(index, { path: event.target.value })}
-                    onBlur={flushLocalFolders}
-                  />
-                  <button
-                    type="button"
-                    className="icon-button"
-                    title="폴더 선택"
-                    aria-label={`참고 폴더 ${index + 1} 선택`}
-                    onClick={() => void chooseLocalFolder(index)}
-                  >
-                    <FolderPlus size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    disabled={folder.path.trim().length === 0}
-                    title={folder.path.trim() ? "파일 탐색기에서 열기" : "경로를 먼저 입력하세요"}
-                    aria-label={`참고 폴더 ${index + 1} 열기`}
-                    onClick={() => onRevealLocalFolder(folder.path.trim())}
-                  >
-                    <FolderOpen size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={`참고 폴더 ${index + 1} 삭제`}
-                    title="폴더 삭제"
-                    onClick={() => setLocalFolders((current) => current.filter((_, at) => at !== index))}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                className="work-project-local-add"
-                onClick={() => setLocalFolders((current) => [...current, { label: "", path: "" }])}
-              >
-                <Plus size={13} />
-                <span>폴더 추가</span>
-              </button>
-            </div>
-            <label htmlFor={`wp-memo-${workProject.id}`}>메모</label>
-            <textarea
-              id={`wp-memo-${workProject.id}`}
-              className="detail-memo"
-              value={memo}
-              placeholder="이 프로젝트에 대한 메모…"
-              onChange={(event) => setMemo(event.target.value)}
-              onBlur={() => {
-                if (memo !== workProject.memo) void save({ memo });
-              }}
-            />
           </div>
         </section>
 
+        <WorkProjectDriveCard
+          workProject={workProject}
+          onMemberFolderAdded={onMemberFolderAdded}
+          onProjectRelinked={onProjectRelinked}
+          onOpenPcSettings={onOpenPcSettings}
+        />
+
         <section className="detail-card" aria-label="구성 폴더">
           <div className="detail-card-header">
-            <h2>구성 폴더</h2>
+            <h2>
+              <GitHubIcon size={14} className="brand-icon-github" />
+              <span>코드 · 구성 폴더</span>
+            </h2>
           </div>
           {members.length === 0 ? (
-            <p className="detail-empty">아직 폴더가 없습니다. 레포나 팀즈 문서 폴더를 추가하세요.</p>
+            <p className="detail-empty">아직 폴더가 없습니다. 레포를 추가하거나 위에서 드라이브 폴더를 연결하세요.</p>
           ) : (
             <ul className="work-project-members">
-              {members.map(({ project, role }) => (
-                <li key={project.id}>
-                  <button
-                    type="button"
-                    className="member-open"
-                    onClick={() => onSelectProject(project.id)}
-                    aria-label={`${projectName(project)} 폴더 열기`}
-                  >
-                    {role === "docs" ? (
-                      <TeamsIcon size={14} className="brand-icon-teams" />
-                    ) : (
-                      <GitHubIcon size={14} className="brand-icon-github" />
-                    )}
-                    <span className="member-copy">
-                      <span className="member-name">
-                        {projectName(project)}
-                        <span className="member-role">{role === "docs" ? "문서" : "레포"}</span>
-                      </span>
-                      <span className="member-path" title={project.rootPath}>
-                        {project.rootPath}
-                      </span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    onClick={() => onRevealProject(project.id)}
-                    aria-label={`${projectName(project)} 파일 탐색기에서 열기`}
-                    title="파일 탐색기에서 열기"
-                  >
-                    <FolderOpen size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    onClick={() => void removeMember(project.id)}
-                    aria-label={`${projectName(project)} 프로젝트에서 제외`}
-                    title="프로젝트에서 제외 (폴더 목록에는 남음)"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </li>
-              ))}
+              {repoMembers.map(renderMember)}
+              {docsMembers.map(renderMember)}
             </ul>
           )}
           <div className="detail-actions-row">
@@ -639,28 +533,196 @@ export function WorkProjectDetailPage({
               <FolderPlus size={14} />
               <span>레포 추가</span>
             </button>
+            <button type="button" disabled={pending} onClick={() => void addMemberFolder("docs")}>
+              <BookOpen size={14} />
+              <span>다른 문서 폴더 추가</span>
+            </button>
+          </div>
+          {teamsSyncRoot ? (
+            <p className="work-project-teams-root">
+              <TeamsIcon size={13} className="brand-icon-teams" />
+              팀즈 동기화 루트(이전 설정): <span title={teamsSyncRoot}>{teamsSyncRoot}</span>
+              <button type="button" onClick={() => void clearTeamsRoot()}>
+                해제
+              </button>
+            </p>
+          ) : null}
+        </section>
+
+        <section className="detail-card" aria-label="노션">
+          <h2 id={`wp-notion-${workProject.id}`}>노션 페이지</h2>
+          <div className="work-project-notion-list" role="group" aria-labelledby={`wp-notion-${workProject.id}`}>
+            {notionLinks.map((link, index) => {
+              const url = link.url.trim();
+              const check = url.length > 0 ? notionChecks[url] : undefined;
+              const checking = url.length > 0 && notionInFlight.has(url);
+              return (
+                <div className="work-project-notion-row" key={index}>
+                  <input
+                    className="notion-label-input"
+                    type="text"
+                    value={link.label}
+                    placeholder={index === 0 ? "채널" : `${index}차년도`}
+                    aria-label={`노션 링크 ${index + 1} 라벨`}
+                    onChange={(event) => updateNotionLink(index, { label: event.target.value })}
+                    onBlur={flushNotionLinks}
+                  />
+                  <input
+                    type="text"
+                    value={link.url}
+                    placeholder="https://notion.so/…"
+                    aria-label={`노션 링크 ${index + 1} URL`}
+                    onChange={(event) => updateNotionLink(index, { url: event.target.value })}
+                    onBlur={flushNotionLinks}
+                  />
+                  {check ? (
+                    <span
+                      className={`notion-link-status ${check.state === "ok" ? "ok" : "warn"}`}
+                      role="img"
+                      aria-label={
+                        check.state === "ok"
+                          ? `노션 링크 ${index + 1} 접근 가능`
+                          : `노션 링크 ${index + 1} 접근 불가: ${check.message ?? ""}`
+                      }
+                      title={check.state === "ok" ? check.title ?? "통합이 이 페이지를 읽을 수 있습니다" : check.message ?? ""}
+                    >
+                      {check.state === "ok" ? <Check size={14} /> : <AlertTriangle size={14} />}
+                    </span>
+                  ) : (
+                    <span className="notion-link-status" aria-hidden="true" />
+                  )}
+                  <button
+                    type="button"
+                    className="icon-button"
+                    disabled={url.length === 0 || checking || notionTokenReady !== true}
+                    title={
+                      notionTokenReady === true
+                        ? url.length === 0
+                          ? "URL을 먼저 입력하세요"
+                          : "제목 다시 가져오기"
+                        : "설정 → 노션에서 통합 토큰을 먼저 입력하세요"
+                    }
+                    aria-label={`노션 링크 ${index + 1} 제목 조회`}
+                    onClick={() => void inspectNotionLink(index, url, true)}
+                  >
+                    <RefreshCw size={14} className={checking ? "spin" : undefined} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    disabled={url.length === 0}
+                    title={url.length > 0 ? "노션에서 열기" : "URL을 먼저 입력하세요"}
+                    aria-label={`노션 링크 ${index + 1} 열기`}
+                    onClick={() => onOpenNotion(url)}
+                  >
+                    <ExternalLink size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`노션 링크 ${index + 1} 삭제`}
+                    title="링크 삭제"
+                    onClick={() => setNotionLinks((current) => current.filter((_, at) => at !== index))}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
             <button
               type="button"
-              disabled={pending}
-              title={teamsSyncRoot ? `기본 위치: ${teamsSyncRoot}` : "팀즈 동기화 루트가 설정되지 않았습니다"}
-              onClick={() => void addMemberFolder("docs")}
+              className="work-project-notion-add"
+              onClick={() => setNotionLinks((current) => [...current, { label: "", url: "" }])}
             >
-              <BookOpen size={14} />
-              <span>팀즈 문서 폴더 추가</span>
+              <Plus size={13} />
+              <span>링크 추가</span>
             </button>
-            {docsMembers.length > 0 ? (
-              <button type="button" onClick={() => onRevealProject(docsMembers[0].project.id)}>
-                <FolderOpen size={14} />
-                <span>팀즈 폴더 열기</span>
-              </button>
-            ) : null}
           </div>
-          <p className="work-project-teams-root">
-            팀즈 동기화 루트: <span title={teamsSyncRoot ?? undefined}>{teamsSyncRoot ?? "설정 안 됨"}</span>
-            <button type="button" onClick={() => void chooseTeamsRoot()}>
-              {teamsSyncRoot ? "변경" : "설정"}
+          {notionError ? (
+            <p className="detail-save-error" role="alert">
+              {notionError}
+            </p>
+          ) : null}
+        </section>
+
+        <section className="detail-card" aria-label="데이터 · 참고 폴더">
+          <h2 id={`wp-folders-${workProject.id}`}>데이터 · 참고 폴더</h2>
+          <p className="detail-empty">이 PC의 data 루트 등, 프로젝트가 읽기만 하는 로컬 폴더입니다.</p>
+          <div className="work-project-local-list" role="group" aria-labelledby={`wp-folders-${workProject.id}`}>
+            {localFolders.map((folder, index) => (
+              <div className="work-project-local-row" key={index}>
+                <input
+                  className="link-label-input"
+                  type="text"
+                  value={folder.label}
+                  placeholder="자료 폴더"
+                  aria-label={`참고 폴더 ${index + 1} 라벨`}
+                  onChange={(event) => updateLocalFolder(index, { label: event.target.value })}
+                  onBlur={flushLocalFolders}
+                />
+                <input
+                  type="text"
+                  value={folder.path}
+                  placeholder="D:\data\프로젝트"
+                  aria-label={`참고 폴더 ${index + 1} 경로`}
+                  onChange={(event) => updateLocalFolder(index, { path: event.target.value })}
+                  onBlur={flushLocalFolders}
+                />
+                <button
+                  type="button"
+                  className="icon-button"
+                  title="폴더 선택"
+                  aria-label={`참고 폴더 ${index + 1} 선택`}
+                  onClick={() => void chooseLocalFolder(index)}
+                >
+                  <FolderPlus size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  disabled={folder.path.trim().length === 0}
+                  title={folder.path.trim() ? "파일 탐색기에서 열기" : "경로를 먼저 입력하세요"}
+                  aria-label={`참고 폴더 ${index + 1} 열기`}
+                  onClick={() => onRevealLocalFolder(folder.path.trim())}
+                >
+                  <FolderOpen size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={`참고 폴더 ${index + 1} 삭제`}
+                  title="폴더 삭제"
+                  onClick={() => setLocalFolders((current) => current.filter((_, at) => at !== index))}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="work-project-local-add"
+              onClick={() => setLocalFolders((current) => [...current, { label: "", path: "" }])}
+            >
+              <Plus size={13} />
+              <span>폴더 추가</span>
             </button>
-          </p>
+          </div>
+        </section>
+
+        <section className="detail-card detail-card-notes" aria-label="메모">
+          <h2>
+            <label htmlFor={`wp-memo-${workProject.id}`}>메모</label>
+          </h2>
+          <textarea
+            id={`wp-memo-${workProject.id}`}
+            className="detail-memo"
+            value={memo}
+            placeholder="이 프로젝트에 대한 메모…"
+            onChange={(event) => setMemo(event.target.value)}
+            onBlur={() => {
+              if (memo !== workProject.memo) void save({ memo });
+            }}
+          />
         </section>
 
         <section className="detail-card detail-card-sessions" aria-label="소속 세션">
@@ -699,7 +761,7 @@ export function WorkProjectDetailPage({
               <span>프로젝트 삭제</span>
             </button>
           </div>
-          <p className="detail-empty">삭제해도 폴더와 세션은 남고, 소속만 해제됩니다.</p>
+          <p className="detail-empty">삭제해도 폴더·드라이브 파일·세션은 남고, 소속만 해제됩니다.</p>
         </section>
       </div>
     </section>

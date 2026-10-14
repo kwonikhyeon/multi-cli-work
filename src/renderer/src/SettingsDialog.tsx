@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { isCategoryCode, sortCategoriesByCode } from "@shared/category-code";
+import type { PcRootsInfo } from "@shared/pc-roots-types";
+import type { ProfileFolderAction, ProfileImportPreview } from "@shared/profile-types";
 import type { NotionTokenStatus } from "@shared/notion-types";
 import type {
   AppSettings,
   AppSettingsPatch,
   FileOpenTarget,
   NotifiableStatus,
+  PcRootKey,
   ProjectCategorySetting,
   ProjectSettings,
 } from "@shared/settings-types";
@@ -38,7 +42,8 @@ export type SettingsTab =
   | "files"
   | "notion"
   | "mobile"
-  | "keybindings";
+  | "keybindings"
+  | "pc";
 
 const TABS: Array<{ id: SettingsTab; label: string }> = [
   { id: "general", label: "일반" },
@@ -50,6 +55,7 @@ const TABS: Array<{ id: SettingsTab; label: string }> = [
   { id: "notion", label: "노션" },
   { id: "mobile", label: "원격" },
   { id: "keybindings", label: "단축키" },
+  { id: "pc", label: "PC · 프로필" },
 ];
 
 const STATUS_LABELS: Array<{ status: NotifiableStatus; label: string }> = [
@@ -421,6 +427,29 @@ function ProjectsSettings({
     );
   };
 
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const changeCode = (index: number, raw: string) => {
+    const code = raw.trim().toUpperCase();
+    setCodeError(null);
+    if (code.length > 0 && !isCategoryCode(code)) {
+      setCodeError("구분 코드는 영문 대문자 한 글자입니다");
+      return;
+    }
+    if (code.length > 0 && categories.some((category, at) => at !== index && category.code === code)) {
+      setCodeError(`코드 ${code}는 이미 다른 구분이 쓰고 있습니다`);
+      return;
+    }
+    applyCategories(
+      categories.map((category, at) => {
+        if (at !== index) return category;
+        const { code: _previous, ...rest } = category;
+        return code.length > 0 ? { ...rest, code } : rest;
+      }),
+    );
+  };
+
+  const sortByCode = () => applyCategories(sortCategoriesByCode(categories));
+
   const changeDefault = (name: string) => {
     setDefaultCategory(name);
     onChange({ defaultCategory: name });
@@ -432,9 +461,22 @@ function ProjectsSettings({
       <p className="settings-hint">
         업무 프로젝트의 구분입니다. 사이드바 레일, 홈 카드, 상세 페이지 칩의 색을 정합니다.
       </p>
+      <p className="settings-hint">
+        코드(영문 대문자 한 글자)는 업무 프로젝트·드라이브 폴더 이름의 접두어입니다(<code>R_DOTORI</code>). 구분 순서대로
+        알파벳을 고르면 드라이브에서도 같은 순서로 정렬됩니다.
+      </p>
       <ul className="settings-list" aria-label="구분 목록">
         {categories.map((category, index) => (
           <li key={index} className="settings-row settings-category-row">
+            <input
+              type="text"
+              className="settings-category-code"
+              aria-label={`구분 ${index + 1} 코드`}
+              placeholder="-"
+              maxLength={1}
+              value={category.code ?? ""}
+              onChange={(event) => changeCode(index, event.target.value)}
+            />
             <input
               type="text"
               aria-label={`구분 ${index + 1} 이름`}
@@ -482,11 +524,19 @@ function ProjectsSettings({
       <div className="settings-row">
         <span />
         <span className="settings-key-controls">
+          <button type="button" onClick={sortByCode} disabled={!categories.some((category) => category.code)}>
+            코드순 정렬
+          </button>
           <button type="button" onClick={addCategory}>
             구분 추가
           </button>
         </span>
       </div>
+      {codeError ? (
+        <p className="settings-error" role="alert">
+          {codeError}
+        </p>
+      ) : null}
       <div className="settings-row">
         <label htmlFor="settings-default-category">기본 구분</label>
         <select
@@ -505,6 +555,276 @@ function ProjectsSettings({
         새로 만들어지는 업무 프로젝트가 받는 구분입니다. 이미 있는 프로젝트의 구분은 바뀌지 않습니다. 이름을
         바꿔도 마찬가지입니다 — 목록에서 빠진 구분은 회색으로 보이고, 상세 페이지에서 다시 고를 수 있습니다.
       </p>
+    </>
+  );
+}
+
+const PROFILE_SETTING_LABELS: Record<string, string> = {
+  language: "언어",
+  general: "일반",
+  terminal: "터미널",
+  notifications: "알림",
+  keybindings: "단축키",
+  projects: "프로젝트 구분",
+  files: "파일",
+  fanOut: "팬아웃 템플릿",
+  appearance: "테마",
+  usage: "사용량",
+};
+
+const FOLDER_ACTION_LABELS: Record<ProfileFolderAction, string> = {
+  add: "등록",
+  exists: "이미 있음",
+  missing: "이 PC에 없음",
+};
+
+/**
+ * 설정 프로필 — 지금 PC의 설정·업무 프로젝트·폴더를 드라이브에 내보내고, 다른 PC에서 미리 본 뒤
+ * 병합해 불러온다. 계속 동기화하지 않는다. 불러오기는 지우지 않고, 직전 파일을 백업한다.
+ */
+function ProfileSection() {
+  const [defaultPath, setDefaultPath] = useState<string | null>(null);
+  const [preview, setPreview] = useState<ProfileImportPreview | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    window.multiCliWork.profile
+      .defaultPath()
+      .then((next) => {
+        if (alive) setDefaultPath(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await action();
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportProfile = () =>
+    run(async () => {
+      const result = await window.multiCliWork.profile.export();
+      if (result) {
+        setNotice(`내보냈습니다: ${result.path} (업무 프로젝트 ${result.workProjectCount}개, 폴더 ${result.folderCount}개)`);
+      }
+    });
+  const previewImport = () =>
+    run(async () => {
+      setPreview(await window.multiCliWork.profile.preview());
+    });
+  const applyImport = () =>
+    run(async () => {
+      const result = await window.multiCliWork.profile.apply();
+      setPreview(null);
+      setNotice(
+        [
+          `불러왔습니다 — 업무 프로젝트 추가 ${result.addedWorkProjects}개·갱신 ${result.updatedWorkProjects}개, 폴더 등록 ${result.addedFolders}개.`,
+          result.missingFolders.length > 0 ? `이 PC에 없어 건너뛴 폴더 ${result.missingFolders.length}개.` : "",
+          `이전 파일 백업: ${result.backupDir}`,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+    });
+
+  const missing = preview?.folders.filter((folder) => folder.action === "missing") ?? [];
+
+  return (
+    <>
+      <h2>설정 프로필</h2>
+      <p className="settings-hint">
+        설정·프로젝트 구분·업무 프로젝트·폴더 목록·태그를 파일 하나로 내보내고 다른 PC에서 불러옵니다. 경로는 위 루트
+        기준으로 바꿔 옮기고, 원격 설정·이 PC의 루트·노션 토큰은 옮기지 않습니다.
+      </p>
+      <p className="settings-hint">
+        기본 위치: <code>{defaultPath ?? "드라이브 루트가 없어 직접 고릅니다"}</code>
+      </p>
+      <div className="settings-row">
+        <span />
+        <span className="settings-key-controls">
+          <button type="button" disabled={busy} onClick={() => void exportProfile()}>
+            내보내기
+          </button>
+          <button type="button" disabled={busy} onClick={() => void previewImport()}>
+            불러오기…
+          </button>
+        </span>
+      </div>
+      {preview ? (
+        <div className="profile-preview" role="region" aria-label="불러오기 미리보기">
+          <p>
+            <strong>{preview.exportedFrom || "알 수 없는 PC"}</strong>에서 {preview.exportedAt.slice(0, 16).replace("T", " ")}에 내보낸
+            프로필
+          </p>
+          <ul className="settings-list">
+            <li className="settings-hint">
+              설정: {preview.settingsChanged.length > 0 ? preview.settingsChanged.map((key) => PROFILE_SETTING_LABELS[key] ?? key).join(", ") : "바뀌는 것 없음"}
+            </li>
+            <li className="settings-hint">
+              업무 프로젝트: 추가 {preview.workProjects.filter((entry) => entry.action === "add").length}개 · 갱신{" "}
+              {preview.workProjects.filter((entry) => entry.action === "update").length}개
+            </li>
+            <li className="settings-hint">
+              폴더: 등록 {preview.folders.filter((entry) => entry.action === "add").length}개 · 이미 있음{" "}
+              {preview.folders.filter((entry) => entry.action === "exists").length}개 · 이 PC에 없음 {missing.length}개
+            </li>
+          </ul>
+          {preview.folders.length > 0 ? (
+            <details>
+              <summary>폴더 자세히</summary>
+              <ul className="settings-list profile-folder-list">
+                {preview.folders.map((entry) => (
+                  <li key={entry.path} className={`profile-folder-${entry.action}`}>
+                    <span title={entry.resolvedPath ?? undefined}>{entry.path}</span>
+                    <span>{FOLDER_ACTION_LABELS[entry.action]}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+          <div className="settings-row">
+            <span className="settings-hint">지우는 것은 없습니다. 적용 직전 파일을 백업합니다.</span>
+            <span className="settings-key-controls">
+              <button type="button" disabled={busy} onClick={() => setPreview(null)}>
+                취소
+              </button>
+              <button type="button" disabled={busy} onClick={() => void applyImport()}>
+                적용
+              </button>
+            </span>
+          </div>
+        </div>
+      ) : null}
+      {notice ? (
+        <p className="settings-hint" role="status">
+          {notice}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="settings-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+const PC_ROOT_LABELS: Array<{ key: PcRootKey; label: string; hint: string }> = [
+  { key: "drive", label: "Google Drive", hint: "내 드라이브 — 업무 프로젝트 문서 폴더의 기준" },
+  { key: "dev", label: "dev", hint: "개발 레포 — 레포 추가 대화상자가 여기서 시작" },
+  { key: "data", label: "data", hint: "대용량 데이터 — 참고 폴더 대화상자가 여기서 시작" },
+  { key: "work", label: "work", hint: "작업 셸·문서(선택)" },
+];
+
+/**
+ * 이 PC의 루트. 3대 PC가 `C:`·`D:`처럼 서로 달라 프로필로 옮기지 않는다 — 지정하지 않으면 관례
+ * 위치를 찾아 쓴다. 아래의 설정 프로필은 이 루트를 기준으로 경로를 바꿔 옮긴다.
+ */
+function PcSettings({ profileSection }: { profileSection?: ReactNode }) {
+  const [info, setInfo] = useState<PcRootsInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    window.multiCliWork.pcRoots
+      .get()
+      .then((next) => {
+        if (alive) setInfo(next);
+      })
+      .catch((cause: unknown) => {
+        if (alive) setError(errorMessage(cause));
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const run = (action: () => Promise<PcRootsInfo | null>) => {
+    setBusy(true);
+    setError(null);
+    action()
+      .then((next) => {
+        if (next) setInfo(next);
+      })
+      .catch((cause: unknown) => setError(errorMessage(cause)))
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <>
+      <h2>이 PC의 루트</h2>
+      <p className="settings-hint">
+        PC마다 다른 위치(<code>C:\dev</code>·<code>D:\dev</code> 등)입니다. 비워 두면 관례 위치를 자동으로 찾습니다.
+      </p>
+      {info === null ? (
+        <p className="settings-hint">확인 중…</p>
+      ) : (
+        <ul className="settings-list" aria-label="PC 루트">
+          {PC_ROOT_LABELS.map(({ key, label, hint }) => {
+            const configured = info.configured[key];
+            const effective = info.effective[key];
+            return (
+              <li key={key} className="settings-row pc-root-row">
+                <span className="settings-list-copy">
+                  <strong>{label}</strong>
+                  <span title={effective ?? undefined}>
+                    {effective ?? "찾지 못함"}
+                    <span className="pc-root-source">{configured ? " · 지정" : effective ? " · 자동" : ""}</span>
+                  </span>
+                  <span className="settings-hint">{hint}</span>
+                </span>
+                <span className="settings-key-controls">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-label={`${label} 루트 지정`}
+                    onClick={() => run(() => window.multiCliWork.pcRoots.choose(key))}
+                  >
+                    지정
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || configured === null}
+                    aria-label={`${label} 루트 자동으로`}
+                    onClick={() => run(() => window.multiCliWork.pcRoots.clear(key))}
+                  >
+                    자동
+                  </button>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <div className="settings-row">
+        <span />
+        <span className="settings-key-controls">
+          <button type="button" disabled={busy} onClick={() => run(() => window.multiCliWork.pcRoots.redetect())}>
+            다시 찾기
+          </button>
+        </span>
+      </div>
+      {error ? (
+        <p className="settings-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {profileSection}
     </>
   );
 }
@@ -972,6 +1292,7 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
             </>
           ) : null}
           {tab === "notion" ? <NotionSettings /> : null}
+          {tab === "pc" ? <PcSettings profileSection={<ProfileSection />} /> : null}
           {tab === "mobile" ? <RemoteSettings settings={settings} /> : null}
           {tab === "keybindings" ? (
             <>

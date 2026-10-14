@@ -62,10 +62,10 @@ import {
 import { HtmlPreviewController } from "./providers/html-preview-controller";
 import { HtmlPreviewView } from "./providers/html-preview-view";
 import { ProjectService } from "./projects/project-service";
-import { readProjectRegistry, restoreProjectRegistryFromBackup } from "./projects/project-registry";
+import { PROJECT_REGISTRY_PATH, readProjectRegistry, restoreProjectRegistryFromBackup } from "./projects/project-registry";
 import { WorkProjectService } from "./projects/work-project-service";
-import { readWorkProjectRegistry } from "./projects/work-project-registry";
-import { readProjectTags, setProjectTags } from "./projects/project-tags-registry";
+import { WORK_PROJECT_REGISTRY_PATH, readWorkProjectRegistry } from "./projects/work-project-registry";
+import { PROJECT_TAGS_PATH, readProjectTags, setProjectTags } from "./projects/project-tags-registry";
 import { tagsOf } from "../shared/project-tags-types";
 import {
   renderWorkProjectBrief,
@@ -144,6 +144,8 @@ import { readCodexUsage } from "./usage/codex-usage";
 import { parseUsageSnapshot, UsageService, type ClaudeReading } from "./usage/usage-service";
 import { readWorktreeScripts, removeWorktreeScripts, setWorktreeScripts } from "./projects/worktree-scripts";
 import { aggregateTaskbarProgress, type TaskbarProgress } from "./window-progress";
+import { PcRootsProvider } from "./settings/pc-roots";
+import { createProfileGateway } from "./profile/profile-gateway";
 
 function stringEnvironment(): Record<string, string> {
   return Object.fromEntries(
@@ -188,6 +190,7 @@ export async function createDesktopRuntime(
   const recoveryMarkerPath = path.join(userData, "shutdown-recovery.json");
   await consumeRecoveryMarker(recoveryMarkerPath, statePath);
   const settingsService = await createSettingsService(path.join(userData, "settings.json"));
+  const pcRoots = new PcRootsProvider(() => settingsService.current().pcRoots);
   // 노션 통합 토큰은 시크릿이라 settings.json(평문)이 아니라 safeStorage로 암호화한 별도 파일에 둔다.
   const notionService = createNotionService(
     createNotionTokenStore(path.join(userData, "notion-credentials.json"), safeStorage),
@@ -350,8 +353,8 @@ export async function createDesktopRuntime(
               .map((member) => ({ project: registry.projects[member.projectId] ?? null, role: member.role }))
               .filter((member): member is WorkProjectBriefMember => member.project !== null),
             tags,
-            // 팀즈 어휘를 쓸지는 이 설정 하나로 결정된다 — 없으면 브리프가 팀즈를 언급하지 않는다.
-            { teamsSyncRoot: workProjectRegistry.teamsSyncRoot },
+            // 문서 어휘(드라이브·팀즈)는 문서 폴더가 어느 루트 아래에 있는지로 정해진다.
+            { teamsSyncRoot: workProjectRegistry.teamsSyncRoot, driveRoot: pcRoots.info().effective.drive },
           )
         : null;
       const project = registry.projects[projectId] ?? null;
@@ -766,6 +769,54 @@ export async function createDesktopRuntime(
       get: () => settingsService.current(),
       update: (patch) => updateSettings(patch),
     },
+    pcRoots: {
+      info: () => pcRoots.info(),
+      redetect: () => pcRoots.redetect(),
+    },
+    profile: createProfileGateway({
+      deps: {
+        roots: () => pcRoots.logicalRoots(),
+        machineName: () => os.hostname(),
+        now: () => new Date(),
+        platform: process.platform,
+        settings: { get: () => settingsService.current(), update: (patch) => updateSettings(patch) },
+        readProjects: async () => (await readProjectRegistry({ registryPath })).registry,
+        projects: projectService,
+        readWorkProjects: () =>
+          readWorkProjectRegistry({ ...(workProjectRegistryPath ? { registryPath: workProjectRegistryPath } : {}) }),
+        workProjects: workProjectService,
+        readTags: () => readProjectTags(projectTagsOptions),
+        setTags: (workProjectId, tags) => setProjectTags(workProjectId, tags, projectTagsOptions),
+        backup: {
+          files: [
+            path.join(userData, "settings.json"),
+            registryPath ?? PROJECT_REGISTRY_PATH,
+            workProjectRegistryPath ?? WORK_PROJECT_REGISTRY_PATH,
+            projectTagsPath ?? PROJECT_TAGS_PATH,
+          ],
+          dir: path.join(userData, "profile-backups"),
+        },
+      },
+      driveRoot: () => pcRoots.info().effective.drive,
+      fallbackDir: () => app.getPath("documents"),
+      async chooseSavePath(defaultPath) {
+        const window = host.getMainWindow();
+        const options: Electron.SaveDialogOptions = { defaultPath, filters: [{ name: "JSON", extensions: ["json"] }] };
+        const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
+        return result.canceled || !result.filePath ? null : result.filePath;
+      },
+      async chooseOpenPath(defaultPath) {
+        const window = host.getMainWindow();
+        const options: Electron.OpenDialogOptions = {
+          defaultPath,
+          properties: ["openFile"],
+          filters: [{ name: "JSON", extensions: ["json"] }],
+        };
+        const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+        return result.canceled ? null : result.filePaths[0] ?? null;
+      },
+      onImported: announceWorkspaceChange,
+    }),
     worktrees: {
       list: () => worktrees.list(),
       sync: (projects) => worktrees.sync(projects),

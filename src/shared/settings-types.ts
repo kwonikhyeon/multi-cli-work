@@ -54,6 +54,11 @@ export interface ProjectCategorySetting {
   name: string;
   /** 팔레트 인덱스 1..ACCENT_COLOR_COUNT — 색이 아니라 인덱스인 것은 테마가 색을 정하기 때문. */
   color: number;
+  /**
+   * 구분 코드 — 대문자 한 글자(A–Z). 업무 프로젝트·드라이브 최상위 폴더 이름의 접두어
+   * (`R_DOTORI`)로 쓰여, 알파벳순 정렬이 곧 구분 순서가 되게 한다. 없으면 접두어 규칙을 쓰지 않는다.
+   */
+  code?: string;
 }
 
 export interface ProjectSettings {
@@ -61,6 +66,21 @@ export interface ProjectSettings {
   /** 항상 categories 안의 이름이다(파서가 보장). */
   defaultCategory: string;
 }
+
+/**
+ * 이 PC의 루트 폴더 지정값. null이면 자동 탐지(`pc-roots-detect.ts`)를 따른다 — 3대 PC가
+ * `C:\dev`·`D:\dev`처럼 서로 달라서 프로필로 옮기지 않는 유일한 PC 전용 설정이다.
+ */
+export interface PcRootsSettings {
+  dev: string | null;
+  data: string | null;
+  work: string | null;
+  /** Google Drive "내 드라이브" 폴더(예: `G:\내 드라이브`). */
+  drive: string | null;
+}
+
+export const PC_ROOT_KEYS = ["dev", "data", "work", "drive"] as const;
+export type PcRootKey = (typeof PC_ROOT_KEYS)[number];
 
 /** 확장자별 기본 열기 대상. */
 export type FileOpenTarget = "in-app" | "os" | "vscode";
@@ -139,6 +159,7 @@ export interface AppSettings {
   appearance: AppearanceSettings;
   remote: RemoteSettings;
   usage: UsageSettings;
+  pcRoots: PcRootsSettings;
 }
 
 export interface AppSettingsPatch {
@@ -162,12 +183,15 @@ export interface AppSettingsPatch {
   appearance?: Partial<AppearanceSettings>;
   remote?: Partial<RemoteSettings>;
   usage?: Partial<UsageSettings>;
+  pcRoots?: Partial<PcRootsSettings>;
 }
 
 export const TERMINAL_FONT_SIZE_RANGE = { min: 8, max: 32 } as const;
 export const TERMINAL_LINE_HEIGHT_RANGE = { min: 1, max: 2 } as const;
 export const TERMINAL_SCROLLBACK_RANGE = { min: 1_000, max: 100_000 } as const;
 export const MAX_CATEGORY_NAME_LENGTH = 32;
+export const CATEGORY_CODE_PATTERN = /^[A-Z]$/;
+const MAX_ROOT_PATH_LENGTH = 1024;
 
 /** 범용 4종 — 색은 서로 달라야 목록에서 구분이 되고, "기타"가 기본인 것은 분류를 미룰 탈출구가 있어야 하기 때문. */
 export const DEFAULT_PROJECT_CATEGORIES: readonly ProjectCategorySetting[] = [
@@ -205,6 +229,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   appearance: { theme: "dark" },
   remote: { enabled: false, port: DEFAULT_REMOTE_PORT },
   usage: { enabled: true, notifyAt90: true },
+  pcRoots: { dev: null, data: null, work: null, drive: null },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -263,12 +288,16 @@ function readProjectSettings(raw: unknown, defaults: ProjectSettings): ProjectSe
   let categories: ProjectCategorySetting[];
   if (Array.isArray(raw.categories)) {
     const seen = new Set<string>();
+    const seenCodes = new Set<string>();
     categories = [];
     for (const item of raw.categories) {
       if (!isRecord(item) || typeof item.name !== "string") continue;
       const name = item.name.trim().slice(0, MAX_CATEGORY_NAME_LENGTH);
       if (name.length === 0 || seen.has(name)) continue;
       seen.add(name);
+      const rawCode = typeof item.code === "string" ? item.code.trim().toUpperCase() : "";
+      const code = CATEGORY_CODE_PATTERN.test(rawCode) && !seenCodes.has(rawCode) ? rawCode : undefined;
+      if (code !== undefined) seenCodes.add(code);
       const color =
         typeof item.color === "number" &&
         Number.isInteger(item.color) &&
@@ -276,7 +305,7 @@ function readProjectSettings(raw: unknown, defaults: ProjectSettings): ProjectSe
         item.color <= ACCENT_COLOR_COUNT
           ? item.color
           : (categories.length % ACCENT_COLOR_COUNT) + 1;
-      categories.push({ name, color });
+      categories.push(code !== undefined ? { name, color, code } : { name, color });
     }
     if (categories.length === 0) categories = [...DEFAULT_PROJECT_CATEGORIES];
   } else {
@@ -289,6 +318,12 @@ function readProjectSettings(raw: unknown, defaults: ProjectSettings): ProjectSe
     : categories[0]!.name;
 
   return { categories, defaultCategory };
+}
+
+function readRootPath(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 && trimmed.length <= MAX_ROOT_PATH_LENGTH ? trimmed : null;
 }
 
 /** 이름이 비었거나 겹치는 항목, 너무 긴 항목은 버린다 — 파일을 손으로 고쳐도 대화상자가 깨지지 않게. */
@@ -316,6 +351,7 @@ export function parseSettings(value: unknown): AppSettings {
   const statuses = isRecord(notifications.statuses) ? notifications.statuses : {};
   const quietHours = isRecord(notifications.quietHours) ? notifications.quietHours : {};
   const usage = isRecord(raw.usage) ? raw.usage : {};
+  const pcRoots = isRecord(raw.pcRoots) ? raw.pcRoots : {};
 
   const keybindings: Record<string, string | null> = {};
   if (isRecord(raw.keybindings)) {
@@ -433,6 +469,12 @@ export function parseSettings(value: unknown): AppSettings {
       enabled: readBoolean(usage.enabled, defaults.usage.enabled),
       notifyAt90: readBoolean(usage.notifyAt90, defaults.usage.notifyAt90),
     },
+    pcRoots: {
+      dev: readRootPath(pcRoots.dev),
+      data: readRootPath(pcRoots.data),
+      work: readRootPath(pcRoots.work),
+      drive: readRootPath(pcRoots.drive),
+    },
   };
 }
 
@@ -468,5 +510,6 @@ export function mergeSettingsPatch(current: AppSettings, patch: AppSettingsPatch
     appearance: { ...current.appearance, ...patch.appearance },
     remote: { ...current.remote, ...patch.remote },
     usage: { ...current.usage, ...patch.usage },
+    pcRoots: { ...current.pcRoots, ...patch.pcRoots },
   };
 }

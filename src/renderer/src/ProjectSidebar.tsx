@@ -41,11 +41,13 @@ import {
 } from "react";
 import { DocumentRow, SessionRow } from "./PaneRows";
 import { reorderIds, type DropPosition } from "./project-order";
+import { reorderWorkProjects } from "./work-project-order";
 import { ProjectMetadataEditor } from "./ProjectMetadataEditor";
 import { SessionPanel } from "./SessionPanel";
 import { RemoteHostsSection } from "./RemoteHostsSection";
 import { UpdateBadge } from "./UpdateBadge";
-import { AgentIcon, GitHubIcon, TeamsIcon } from "./brand-icons";
+import { AgentIcon, GitHubIcon } from "./brand-icons";
+import { DocsFolderIcon } from "./docs-folder-icon";
 import { DocumentPaneIcon, paneRowClass, type DocumentPane, type PaneRow } from "./pane-items";
 import { findAgent, projectName, sessionLabel, statusLabels } from "./session-labels";
 import { isSessionDrag, readSessionDrag, startSessionDrag } from "./session-drag";
@@ -149,6 +151,8 @@ interface ProjectSidebarProps {
    */
   onExpandWorking(): void;
   onReorderProjects(orderedIds: string[]): void;
+  /** 업무 프로젝트 드래그 정렬 — 전체 순서를 넘긴다. 구분이 다른 자리로는 옮기지 않는다. */
+  onReorderWorkProjects(orderedIds: string[]): void;
   onProjectContextMenu(project: SharedProject, event: ReactMouseEvent): void;
   onProjectSaved(project: SharedProject): void;
   onCloseEditor(): void;
@@ -324,6 +328,7 @@ export function ProjectSidebar({
   onCollapseAll,
   onExpandWorking,
   onReorderProjects,
+  onReorderWorkProjects,
   onProjectContextMenu,
   onProjectSaved,
   onCloseEditor,
@@ -405,6 +410,21 @@ export function ProjectSidebar({
   }, [flashProjectId]);
 
   const endDrag = () => setDrag(null);
+  // 업무 프로젝트 행 드래그는 폴더 드래그와 따로 든다 — 폴더를 머리 행에 떨구면 소속 이동이라 뜻이 다르다.
+  const [workProjectDrag, setWorkProjectDrag] = useState<{
+    id: string;
+    over: { id: string; position: DropPosition } | null;
+  } | null>(null);
+  const workProjectDropPosition = (event: ReactDragEvent<HTMLElement>): DropPosition => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return event.clientY < bounds.top + bounds.height / 2 ? "before" : "after";
+  };
+  const canDropWorkProjectOn = (targetId: string) => {
+    if (!workProjectDrag || workProjectDrag.id === targetId) return false;
+    const dragged = workProjects.find((candidate) => candidate.id === workProjectDrag.id);
+    const target = workProjects.find((candidate) => candidate.id === targetId);
+    return dragged !== undefined && target !== undefined && dragged.category === target.category;
+  };
 
   /**
    * Shelf rows accept panes, not folders — folder drags carry only `text/plain`, so the session type
@@ -781,14 +801,52 @@ export function ProjectSidebar({
       >
         {workProject ? (
           <div
-            className={`work-project-row ${selectedWorkProjectId === workProject.id ? "selected" : ""}`}
+            className={[
+              "work-project-row",
+              selectedWorkProjectId === workProject.id ? "selected" : "",
+              workProjectDrag?.id === workProject.id ? "dragging" : "",
+              workProjectDrag?.over?.id === workProject.id ? `drop-${workProjectDrag.over.position}` : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            draggable={!readOnly}
+            onDragStart={(event) => {
+              event.dataTransfer.setData("text/plain", workProject.id);
+              event.dataTransfer.effectAllowed = "move";
+              setWorkProjectDrag({ id: workProject.id, over: null });
+            }}
+            onDragEnd={() => setWorkProjectDrag(null)}
             onDragOver={(event) => {
+              if (workProjectDrag) {
+                if (!canDropWorkProjectOn(workProject.id)) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                const position = workProjectDropPosition(event);
+                setWorkProjectDrag((current) =>
+                  !current || (current.over?.id === workProject.id && current.over.position === position)
+                    ? current
+                    : { ...current, over: { id: workProject.id, position } },
+                );
+                return;
+              }
               // A folder dragged onto the group header moves into that group.
               if (!drag || projectMembership[drag.id]?.workProjectId === workProject.id) return;
               event.preventDefault();
               event.dataTransfer.dropEffect = "move";
             }}
             onDrop={(event) => {
+              if (workProjectDrag) {
+                event.preventDefault();
+                const ordered = reorderWorkProjects(
+                  workProjects,
+                  workProjectDrag.id,
+                  workProject.id,
+                  workProjectDropPosition(event),
+                );
+                setWorkProjectDrag(null);
+                if (ordered) onReorderWorkProjects(ordered);
+                return;
+              }
               if (!drag) return;
               event.preventDefault();
               const dragId = drag.id;
@@ -940,7 +998,7 @@ export function ProjectSidebar({
                         {rootMissing ? (
                           <FolderX size={15} aria-label="폴더 없음" />
                         ) : projectMembership[project.id]?.role === "docs" ? (
-                          <TeamsIcon size={15} className="brand-icon-teams" />
+                          <DocsFolderIcon rootPath={project.rootPath} size={15} />
                         ) : projectMembership[project.id]?.role === "repo" ? (
                           <GitHubIcon size={15} className="brand-icon-github" />
                         ) : expanded ? (

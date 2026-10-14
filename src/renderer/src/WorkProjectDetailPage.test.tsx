@@ -1,4 +1,5 @@
 import type { MultiCliWorkApi } from "@shared/api-types";
+import type { DriveProjectStatus } from "@shared/drive-types";
 import { notionLinkCheck, type NotionLinkCheck } from "@shared/notion-types";
 import type { ProjectTagsV1 } from "@shared/project-tags-types";
 import { DEFAULT_PROJECT_CATEGORIES, type ProjectCategorySetting } from "@shared/settings-types";
@@ -23,6 +24,15 @@ const WORK_PROJECT: WorkProject = {
   updatedAt: "2026-07-11T00:00:00.000Z",
 };
 
+const NO_DRIVE: DriveProjectStatus = {
+  root: null,
+  folderPath: null,
+  exists: false,
+  subfolders: [],
+  linkedProjectId: null,
+  legacyDocs: [],
+};
+
 const NOTION_PROJECT: WorkProject = {
   ...WORK_PROJECT,
   notionLinks: [{ label: "노션", url: "https://notion.so/a" }],
@@ -31,6 +41,7 @@ const NOTION_PROJECT: WorkProject = {
 function installApi(
   picked: string | null = null,
   notionOptions: { configured?: boolean; check?: NotionLinkCheck } = {},
+  driveOptions: { status?: DriveProjectStatus; api?: Record<string, unknown> } = {},
 ) {
   const registry: WorkProjectRegistryV1 = {
     schemaVersion: 1,
@@ -50,12 +61,22 @@ function installApi(
     tags: { [WORK_PROJECT.id]: ["개인"] },
   };
   const setTags = vi.fn().mockResolvedValue(tagRegistry);
+  const driveStatus = vi.fn().mockResolvedValue(driveOptions.status ?? NO_DRIVE);
+  const driveApi = {
+    status: driveStatus,
+    createFolder: vi.fn(),
+    link: vi.fn(),
+    migrateDocs: vi.fn(),
+    reveal: vi.fn().mockResolvedValue(undefined),
+    ...driveOptions.api,
+  };
   window.multiCliWork = {
     workProjects: { update, chooseLocalFolder },
+    drive: driveApi,
     notion: { status, setToken: vi.fn(), clearToken: vi.fn(), inspectLink },
     projectTags: { list: vi.fn().mockResolvedValue(tagRegistry), set: setTags },
   } as unknown as MultiCliWorkApi;
-  return { update, chooseLocalFolder, status, inspectLink, setTags, tagRegistry };
+  return { update, chooseLocalFolder, status, inspectLink, setTags, tagRegistry, driveApi };
 }
 
 function renderPage(
@@ -78,6 +99,8 @@ function renderPage(
       onSelectProject={vi.fn()}
       onRegistryChanged={vi.fn()}
       onMemberFolderAdded={vi.fn()}
+      onProjectRelinked={vi.fn()}
+      onOpenPcSettings={vi.fn()}
       onRemoveWorkProject={vi.fn()}
       onOpenNotion={vi.fn()}
       onRevealProject={vi.fn()}
@@ -344,5 +367,30 @@ describe("WorkProjectDetailPage 태그", () => {
 
     await waitFor(() => expect(setTags).toHaveBeenCalledWith("wp-1", ["개인"]));
     await waitFor(() => expect(onTagsChanged).toHaveBeenCalledWith(tagRegistry));
+  });
+});
+
+describe("WorkProjectDetailPage 구분 코드", () => {
+  const CODED = [
+    { name: "연구개발", color: 3, code: "R" },
+    { name: "우리", color: 5, code: "U" },
+  ];
+
+  it("접두어가 구분 코드와 다르면 알리고, 버튼 한 번에 이름을 고친다", async () => {
+    const { update } = installApi();
+    renderPage({ ...WORK_PROJECT, name: "F_결혼식", category: "우리" }, { categories: CODED });
+
+    expect(screen.getByLabelText("구분 코드 U")).toHaveTextContent("U");
+    fireEvent.click(screen.getByRole("button", { name: "U_결혼식(으)로 바꾸기" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith("wp-1", { name: "U_결혼식" }));
+  });
+
+  it("코드가 맞거나 코드 없는 구분이면 알리지 않는다", () => {
+    installApi();
+    renderPage({ ...WORK_PROJECT, name: "R_DOTORI", category: "연구개발" }, { categories: CODED });
+    expect(screen.queryByRole("note")).toBeNull();
+    cleanup();
+    renderPage();
+    expect(screen.queryByRole("note")).toBeNull();
   });
 });

@@ -542,3 +542,124 @@ describe("워크스페이스 탭", () => {
     );
   });
 });
+
+describe("구분 코드", () => {
+  const CODED = {
+    ...DEFAULT_SETTINGS,
+    projects: {
+      categories: [
+        { name: "기타", color: 5, code: "Z" },
+        { name: "정부과제", color: 1, code: "G" },
+        { name: "미분류", color: 2 },
+      ],
+      defaultCategory: "기타",
+    },
+  };
+
+  function openProjects() {
+    render(<SettingsDialog settings={CODED} onClose={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: "프로젝트" }));
+  }
+
+  it("코드는 대문자로 저장하고, 겹치거나 글자가 아니면 저장하지 않고 이유를 보인다", async () => {
+    openProjects();
+    fireEvent.change(screen.getByLabelText("구분 3 코드"), { target: { value: "r" } });
+    await waitFor(() =>
+      expect(update).toHaveBeenLastCalledWith({
+        projects: { categories: [CODED.projects.categories[0], CODED.projects.categories[1], { name: "미분류", color: 2, code: "R" }] },
+      }),
+    );
+    update.mockClear();
+    fireEvent.change(screen.getByLabelText("구분 3 코드"), { target: { value: "G" } });
+    expect(screen.getByRole("alert")).toHaveTextContent("코드 G는 이미 다른 구분이 쓰고 있습니다");
+    fireEvent.change(screen.getByLabelText("구분 3 코드"), { target: { value: "1" } });
+    expect(screen.getByRole("alert")).toHaveTextContent("영문 대문자 한 글자");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("코드순 정렬은 코드 알파벳순으로 두고 코드 없는 구분을 뒤에 둔다", async () => {
+    openProjects();
+    fireEvent.click(screen.getByRole("button", { name: "코드순 정렬" }));
+    await waitFor(() =>
+      expect(update).toHaveBeenLastCalledWith({
+        projects: {
+          categories: [
+            { name: "정부과제", color: 1, code: "G" },
+            { name: "기타", color: 5, code: "Z" },
+            { name: "미분류", color: 2 },
+          ],
+        },
+      }),
+    );
+  });
+});
+
+describe("PC · 프로필 탭", () => {
+  const noRoots = { dev: null, data: null, work: null, drive: null };
+  const info = {
+    configured: { ...noRoots, dev: "D:\\dev" },
+    detected: { ...noRoots, dev: "C:\\dev", drive: "G:\\내 드라이브" },
+    effective: { ...noRoots, dev: "D:\\dev", drive: "G:\\내 드라이브" },
+    home: "C:\\Users\\u",
+  };
+
+  function install() {
+    const pcRoots = {
+      get: vi.fn().mockResolvedValue(info),
+      redetect: vi.fn().mockResolvedValue(info),
+      choose: vi.fn().mockResolvedValue(null),
+      clear: vi.fn().mockResolvedValue({ ...info, configured: noRoots, effective: { ...info.effective, dev: "C:\\dev" } }),
+    };
+    const profile = {
+      defaultPath: vi.fn().mockResolvedValue("G:\\내 드라이브\\_config\\multi-cli-work\\profile.json"),
+      export: vi.fn().mockResolvedValue({ path: "G:\\내 드라이브\\_config\\multi-cli-work\\profile.json", folderCount: 5, workProjectCount: 3 }),
+      preview: vi.fn().mockResolvedValue({
+        path: "p.json",
+        exportedAt: "2026-10-15T01:02:00.000Z",
+        exportedFrom: "OFFICE-DESKTOP",
+        settingsChanged: ["projects", "appearance"],
+        workProjects: [
+          { name: "R_DOTORI", action: "update" },
+          { name: "G_전략연구과제", action: "add" },
+        ],
+        folders: [
+          { path: "dev/multi-cli-work", resolvedPath: "D:\\dev\\multi-cli-work", action: "exists" },
+          { path: "dev/dotori_rcs", resolvedPath: "D:\\dev\\dotori_rcs", action: "missing" },
+        ],
+      }),
+      apply: vi.fn().mockResolvedValue({ addedWorkProjects: 1, updatedWorkProjects: 1, addedFolders: 0, missingFolders: ["dev/dotori_rcs"], backupDir: "C:\\bak" }),
+    };
+    Object.assign(window.multiCliWork, { pcRoots, profile });
+    render(<SettingsDialog settings={DEFAULT_SETTINGS} onClose={() => undefined} initialTab="pc" />);
+    return { pcRoots, profile };
+  }
+
+  it("루트의 실제 값과 출처(지정·자동)를 보이고, 지정을 지우면 자동으로 돌아간다", async () => {
+    const { pcRoots } = install();
+    expect(await screen.findByTitle("D:\\dev")).toHaveTextContent("· 지정");
+    expect(screen.getByRole("button", { name: "Google Drive 루트 자동으로" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "dev 루트 자동으로" }));
+    await waitFor(() => expect(pcRoots.clear).toHaveBeenCalledWith("dev"));
+    expect(await screen.findByTitle("C:\\dev")).toHaveTextContent("· 자동");
+  });
+
+  it("내보내고, 불러올 프로필을 미리 본 뒤 적용한다", async () => {
+    const { profile } = install();
+    expect(await screen.findByText("G:\\내 드라이브\\_config\\multi-cli-work\\profile.json")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "내보내기" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("업무 프로젝트 3개, 폴더 5개");
+
+    fireEvent.click(screen.getByRole("button", { name: "불러오기…" }));
+    const region = await screen.findByRole("region", { name: "불러오기 미리보기" });
+    expect(region).toHaveTextContent("OFFICE-DESKTOP");
+    expect(region).toHaveTextContent("설정: 프로젝트 구분, 테마");
+    expect(region).toHaveTextContent("추가 1개 · 갱신 1개");
+    expect(region).toHaveTextContent("이 PC에 없음 1개");
+
+    fireEvent.click(within(region).getByRole("button", { name: "적용" }));
+    await waitFor(() => expect(profile.apply).toHaveBeenCalledOnce());
+    expect(await screen.findByRole("status")).toHaveTextContent("건너뛴 폴더 1개");
+    expect(screen.queryByRole("region", { name: "불러오기 미리보기" })).toBeNull();
+  });
+});

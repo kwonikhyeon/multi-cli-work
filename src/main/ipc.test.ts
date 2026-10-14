@@ -264,6 +264,15 @@ function setup(
     deviceOwners: vi.fn(async () => [{ sessionId: "s2", deviceName: "내 폰" }]),
   };
   const readRegistry = vi.fn(async () => ({ registry, source: "primary" as const, writable: true }));
+  const noRoots = { dev: null, data: null, work: null, drive: null } as Record<"dev" | "data" | "work" | "drive", string | null>;
+  const pcRootsInfo = { configured: { ...noRoots }, detected: { ...noRoots }, effective: { ...noRoots }, home: "C:\\Users\\PC" };
+  const pcRootsGateway = { info: vi.fn(() => pcRootsInfo), redetect: vi.fn(() => pcRootsInfo) };
+  const profileGateway = {
+    defaultPath: vi.fn(() => "G:\내 드라이브\_config\multi-cli-work\profile.json"),
+    exportProfile: vi.fn(async () => null),
+    previewImport: vi.fn(async () => null),
+    applyImport: vi.fn(async () => ({ addedWorkProjects: 0, updatedWorkProjects: 0, addedFolders: 0, missingFolders: [], backupDir: "x" })),
+  };
   registerMainIpc(ipc, {
     projectService,
     workProjectService,
@@ -294,6 +303,8 @@ function setup(
     onSessionSelected: options.onSessionSelected,
     isTrustedSender: options.isTrustedSender,
     settings: settingsGateway,
+    pcRoots: pcRootsGateway,
+    profile: profileGateway,
     notion: notionGateway,
     remote: remoteGateway,
     remoteHosts: remoteHostsGateway as never,
@@ -309,6 +320,9 @@ function setup(
     sizesGateway,
     projectService,
     settingsGateway,
+    pcRootsInfo,
+    pcRootsGateway,
+    profileGateway,
     notionGateway,
     workProjectService,
     workProjectRegistry,
@@ -805,6 +819,24 @@ describe("main IPC boundary", () => {
     });
   });
 
+  it("구분 코드와 PC 루트 패치는 모양이 맞을 때만 통과한다", async () => {
+    const { handlers, settingsGateway } = setup();
+
+    await handlers.get("settings:update")!({}, {
+      projects: { categories: [{ name: "연구개발", color: 3, code: "R" }, { name: "기타", color: 5 }] },
+      pcRoots: { drive: " G:\\내 드라이브 ", dev: null },
+    });
+    expect(settingsGateway.update).toHaveBeenCalledWith({
+      projects: { categories: [{ name: "연구개발", color: 3, code: "R" }, { name: "기타", color: 5 }] },
+      pcRoots: { drive: "G:\\내 드라이브", dev: null },
+    });
+    expect(() =>
+      handlers.get("settings:update")!({}, { projects: { categories: [{ name: "x", color: 1, code: "r" }] } }),
+    ).toThrow(/uppercase/);
+    expect(() => handlers.get("settings:update")!({}, { pcRoots: { onedrive: "C:\\x" } })).toThrow(/unknown fields/);
+    expect(() => handlers.get("settings:update")!({}, { pcRoots: { dev: "  " } })).toThrow(/pcRoots.dev/);
+  });
+
   it("rejects unknown fields, out-of-range values, and mistyped settings patches", () => {
     const { handlers, settingsGateway } = setup();
 
@@ -1228,5 +1260,70 @@ describe("main IPC boundary", () => {
     await expect(handlers.get("shell:open-external")!({}, "file:///etc/passwd")).rejects.toThrow(/http\(s\)/);
     await expect(handlers.get("shell:open-external")!({}, "javascript:alert(1)")).rejects.toThrow(/http\(s\)/);
     expect(shellGateway.openExternal).toHaveBeenCalledOnce();
+  });
+});
+
+describe("PC 루트 · Google Drive IPC", () => {
+  it("문서 폴더 선택기는 드라이브 루트에서, 레포 선택기는 dev 루트에서 시작한다", async () => {
+    const { handlers, chooseDirectory, pcRootsInfo } = setup();
+    pcRootsInfo.effective.drive = "G:\\내 드라이브";
+    pcRootsInfo.effective.dev = "D:\\dev";
+    pcRootsInfo.effective.data = "D:\\data";
+
+    await handlers.get("work-projects:add-member-folder")!({}, "wp-1", "docs");
+    expect(chooseDirectory).toHaveBeenLastCalledWith("G:\\내 드라이브");
+    await handlers.get("work-projects:add-member-folder")!({}, "wp-1", "repo");
+    expect(chooseDirectory).toHaveBeenLastCalledWith("D:\\dev");
+    await handlers.get("work-projects:choose-local-folder")!({});
+    expect(chooseDirectory).toHaveBeenLastCalledWith("D:\\data");
+  });
+
+  it("루트를 대화상자로 지정하고 null로 자동 탐지에 되돌리며, 모르는 키는 거부한다", async () => {
+    const { handlers, settingsGateway, pcRootsGateway, chooseDirectory } = setup();
+
+    await handlers.get("pc-roots:choose")!({}, "drive");
+    expect(settingsGateway.update).toHaveBeenCalledWith({ pcRoots: { drive: "C:\\Work" } });
+    await handlers.get("pc-roots:clear")!({}, "dev");
+    expect(settingsGateway.update).toHaveBeenCalledWith({ pcRoots: { dev: null } });
+    await handlers.get("pc-roots:redetect")!({});
+    expect(pcRootsGateway.redetect).toHaveBeenCalledOnce();
+
+    chooseDirectory.mockResolvedValueOnce(null);
+    await expect(handlers.get("pc-roots:choose")!({}, "data")).resolves.toBeNull();
+    await expect(handlers.get("pc-roots:choose")!({}, "onedrive")).rejects.toThrow(/key/);
+  });
+
+  it("드라이브 루트 없이 폴더를 만들려 하면 이유를 말하고 멈춘다", async () => {
+    const { handlers, workProjectRegistry, projectService } = setup();
+    Object.assign(workProjectRegistry.workProjects, {
+      "wp-1": { id: "wp-1", name: "R_바이브코딩", category: "연구개발", members: [] },
+    });
+
+    await expect(handlers.get("drive:create-folder")!({}, "wp-1", { template: true })).rejects.toThrow(/Google Drive/);
+    await expect(handlers.get("drive:overview")!({})).resolves.toEqual({ root: null, available: false, folders: [] });
+    expect(projectService.registerManualFolder).not.toHaveBeenCalled();
+  });
+
+  it("제안 경로가 없는 문서 폴더는 드라이브로 옮기지 않는다", async () => {
+    const { handlers, workProjectRegistry, projectService, project } = setup();
+    Object.assign(workProjectRegistry.workProjects, {
+      "wp-1": { id: "wp-1", name: "R_DOTORI", category: "연구개발", members: [{ projectId: project.id, role: "docs" }] },
+    });
+
+    await expect(handlers.get("drive:migrate-docs")!({}, "wp-1", project.id)).rejects.toThrow(/옮겨 갈 폴더/);
+    expect(projectService.relinkProject).not.toHaveBeenCalled();
+  });
+});
+
+describe("설정 프로필 IPC", () => {
+  it("기본 경로·내보내기·미리보기·적용을 게이트웨이로 넘긴다 — 적용은 경로를 받지 않는다", async () => {
+    const { handlers, profileGateway } = setup();
+    expect(await handlers.get("profile:default-path")!({})).toContain("_config");
+    await handlers.get("profile:export")!({});
+    await handlers.get("profile:preview")!({});
+    await handlers.get("profile:apply")!({}, "C:\Windows\evil.json");
+    expect(profileGateway.exportProfile).toHaveBeenCalledOnce();
+    expect(profileGateway.previewImport).toHaveBeenCalledOnce();
+    expect(profileGateway.applyImport).toHaveBeenCalledWith();
   });
 });

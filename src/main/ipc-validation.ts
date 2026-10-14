@@ -10,7 +10,9 @@ import type {
   WindowZoomAction,
 } from "../shared/api-types";
 import {
+  CATEGORY_CODE_PATTERN,
   MAX_FAN_OUT_TEMPLATES,
+  PC_ROOT_KEYS,
   MAX_FAN_OUT_TEMPLATE_NAME_LENGTH,
   MAX_FAN_OUT_TEMPLATE_TEXT_LENGTH,
   REMOTE_PORT_RANGE,
@@ -329,7 +331,7 @@ export function validateRemoteHostAdd(value: unknown): RemoteHostAddInput {
 export function validateSettingsPatch(value: unknown): AppSettingsPatch {
   const raw = exactObject(
     value,
-    ["language", "general", "terminal", "notifications", "keybindings", "projects", "files", "fanOut", "appearance", "remote"],
+    ["language", "general", "terminal", "notifications", "keybindings", "projects", "files", "fanOut", "appearance", "remote", "pcRoots"],
     "Settings patch",
   );
   const patch: AppSettingsPatch = {};
@@ -535,16 +537,33 @@ export function validateSettingsPatch(value: unknown): AppSettingsPatch {
     if (projects.categories !== undefined) {
       if (!Array.isArray(projects.categories)) throw new Error("Settings projects.categories must be an array");
       patch.projects.categories = projects.categories.map((item, index): ProjectCategorySetting => {
-        const category = exactObject(item, ["name", "color"], `Settings projects.categories[${index}]`);
+        const category = exactObject(item, ["name", "color", "code"], `Settings projects.categories[${index}]`);
         const color = integer(category.color, `Settings projects.categories[${index}].color`);
         if (color < 1 || color > ACCENT_COLOR_COUNT) {
           throw new Error(`Settings projects.categories[${index}].color must be between 1 and ${ACCENT_COLOR_COUNT}`);
         }
-        return { name: nonEmptyString(category.name, `Settings projects.categories[${index}].name`), color };
+        const name = nonEmptyString(category.name, `Settings projects.categories[${index}].name`);
+        if (category.code === undefined) return { name, color };
+        if (typeof category.code !== "string" || !CATEGORY_CODE_PATTERN.test(category.code)) {
+          throw new Error(`Settings projects.categories[${index}].code must be one uppercase letter`);
+        }
+        return { name, color, code: category.code };
       });
     }
     if (projects.defaultCategory !== undefined) {
       patch.projects.defaultCategory = nonEmptyString(projects.defaultCategory, "Settings projects.defaultCategory");
+    }
+  }
+  if (raw.pcRoots !== undefined) {
+    const roots = exactObject(raw.pcRoots, [...PC_ROOT_KEYS], "Settings pcRoots");
+    patch.pcRoots = {};
+    for (const key of PC_ROOT_KEYS) {
+      const root = roots[key];
+      if (root === undefined) continue;
+      if (root !== null && (typeof root !== "string" || root.trim().length === 0 || root.length > 1024)) {
+        throw new Error(`Settings pcRoots.${key} must be a path or null`);
+      }
+      patch.pcRoots[key] = root === null ? null : root.trim();
     }
   }
   return patch;

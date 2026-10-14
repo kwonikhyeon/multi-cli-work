@@ -34,7 +34,8 @@
 | `notion-credentials.json` | 노션 통합 토큰. OS 자격 증명 저장소(safeStorage)로 암호화한 암호문만 담는다 |
 | `remote-devices.json` | 이 PC에 접속을 허용한 기기(폰·다른 PC)와 이 PC의 호스트 ID. 기기 토큰은 해시만 담는다 |
 | `remote-hosts.json` | 이 PC가 접속하려고 등록한 다른 PC. 기기 토큰은 safeStorage로 암호화한 암호문만 담는다 |
-| `settings.json` | 언어·터미널·알림·단축키·업무 프로젝트 구분 목록. 모르는 필드는 버린다 |
+| `settings.json` | 언어·터미널·알림·단축키·업무 프로젝트 구분 목록(구분 코드 포함)과 이 PC의 루트(`pcRoots`: dev·data·work·Google Drive, 비우면 자동 탐지). 모르는 필드는 버린다 |
+| `profile-backups/` | 설정 프로필을 불러오기 직전에 복사해 둔 `settings.json`·`projects.json`·`work-projects.json`·`project-tags.json`(시각별 폴더) |
 | `shutdown-recovery.json` | 정상 종료 표시. 없으면 지난 실행이 비정상 종료된 것으로 본다 |
 | `session-logs/` | 세션별 스크롤백. 세션마다 상한이 있는 링 버퍼라 무한히 자라지 않는다 |
 | `project-briefs/` | 업무 프로젝트 브리프. Claude 세션 시작 훅이 읽어 초기 컨텍스트로 넣는다 |
@@ -45,6 +46,16 @@
 | `bin/` | jk-coding-cli 클라이언트와 명령 shim. 앱이 띄운 세션의 PATH 앞에 붙는다 |
 | `worktree-scripts/` | 워크트리 스크립트를 실행할 때 쓴 스크립트 파일(worktree id별) |
 | `usage-snapshot.json` | 마지막으로 읽은 Claude·Codex 구독 사용량(퍼센트·초기화 시각·플랜). 토큰은 담지 않는다 |
+
+## 설정 프로필 — Google Drive
+
+설정 › PC · 프로필의 **내보내기**는 `<Google Drive>\_config\multi-cli-work\profile.json`(다른 위치도 고를 수 있다)에
+설정·구분·업무 프로젝트·폴더 목록·태그를 쓴다. 경로는 `dev/…`·`data/…`·`drive/…`·`home/…` 논리 경로로 적고,
+어느 루트에도 속하지 않는 경로만 절대경로로 남긴다. 원격 설정·`pcRoots`·노션 토큰은 넣지 않는다.
+**불러오기**는 미리보기 뒤 병합만 한다 — 지우는 것은 없고, 이 PC에 없는 폴더는 건너뛴다.
+
+업무 프로젝트와 드라이브 폴더의 연결은 저장하지 않는다. 이름이 같은 최상위 폴더(`R_DOTORI` ↔
+`<drive>\R_DOTORI`)를 매번 찾아 쓴다.
 
 ## 외부 설정에 남기는 것
 

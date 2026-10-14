@@ -348,6 +348,8 @@ function createApi(options?: {
     repoOwners: {},
     warnings: [],
   };
+  const noRoots = { dev: null, data: null, work: null, drive: null };
+  const pcRootsInfo = { configured: noRoots, detected: noRoots, effective: noRoots, home: "C:/Users/test" };
   const api: MultiCliWorkApi = {
     platform: "win32",
     projects: {
@@ -377,6 +379,27 @@ function createApi(options?: {
       revealLocalFolder: vi.fn().mockResolvedValue(undefined),
       chooseTeamsSyncRoot: vi.fn().mockResolvedValue(null),
       clearTeamsSyncRoot: vi.fn().mockResolvedValue(workProjectRegistry),
+    },
+    pcRoots: {
+      get: vi.fn().mockResolvedValue(pcRootsInfo),
+      redetect: vi.fn().mockResolvedValue(pcRootsInfo),
+      choose: vi.fn().mockResolvedValue(null),
+      clear: vi.fn().mockResolvedValue(pcRootsInfo),
+    },
+    profile: {
+      defaultPath: vi.fn().mockResolvedValue(null),
+      export: vi.fn().mockResolvedValue(null),
+      preview: vi.fn().mockResolvedValue(null),
+      apply: vi.fn(),
+    },
+    drive: {
+      overview: vi.fn().mockResolvedValue({ root: null, available: false, folders: [] }),
+      status: vi.fn().mockResolvedValue({ root: null, folderPath: null, exists: false, subfolders: [], linkedProjectId: null, legacyDocs: [] }),
+      link: vi.fn(),
+      createFolder: vi.fn(),
+      importFolders: vi.fn().mockResolvedValue(workProjectRegistry),
+      migrateDocs: vi.fn(),
+      reveal: vi.fn().mockResolvedValue(undefined),
     },
     projectTags: {
       list: vi.fn().mockImplementation(async () => projectTagsRegistry),
@@ -2233,7 +2256,7 @@ describe("work project categories", () => {
     expect(header).toHaveClass("accent-1");
   });
 
-  it("marks a member folder with the brand of what it holds — Teams for 문서, GitHub for 레포", async () => {
+  it("marks a member folder with what it holds — GitHub for 레포, the docs icon its path calls for", async () => {
     const harness = createApi({
       projects: [atlas, dashboard],
       sessions: [],
@@ -2253,7 +2276,55 @@ describe("work project categories", () => {
     const folder = (name: string) => within(group).getByRole("button", { name: `${name} 폴더 선택` });
 
     expect(folder("Atlas").querySelector(".brand-icon-github")).toBeInTheDocument();
-    expect(folder("Dashboard").querySelector(".brand-icon-teams")).toBeInTheDocument();
+    // 문서 아이콘은 경로가 정한다(docs-folder-icon.test.ts) — 드라이브·팀즈 밖의 폴더는 일반 문서 아이콘이다.
+    expect(folder("Dashboard").querySelector(".brand-icon-docs")).toBeInTheDocument();
+  });
+
+  it("구분 순서가 먼저고 그 안에서는 만든 순서이며, 같은 구분 안에서만 끌어 옮긴다", async () => {
+    const harness = createApi({
+      projects: [atlas],
+      sessions: [],
+      workProjects: [
+        workProject("wp-etc", "기타 일", "기타", { order: null, createdAt: "2026-07-01T00:00:00.000Z" }),
+        workProject("wp-late", "나중 업무", "업무", { order: null, createdAt: "2026-07-12T00:00:00.000Z" }),
+        workProject("wp-early", "먼저 업무", "업무", { order: null, createdAt: "2026-07-10T00:00:00.000Z" }),
+      ],
+    });
+    vi.mocked(harness.api.workProjects.reorder).mockResolvedValue(await harness.api.workProjects.list());
+    window.multiCliWork = harness.api;
+    render(<App />);
+
+    const nav = await screen.findByRole("navigation", { name: "프로젝트" });
+    await within(nav).findByRole("button", { name: "기타 일 프로젝트 열기" });
+    const names = () =>
+      [...nav.querySelectorAll(".work-project-select .project-name")].map((node) => node.textContent);
+    expect(names()).toEqual(["먼저 업무", "나중 업무", "기타 일"]);
+
+    const row = (name: string) =>
+      within(nav).getByRole("button", { name: `${name} 프로젝트 열기` }).closest(".work-project-row") as HTMLElement;
+    const store = new Map<string, string>();
+    const dataTransfer = {
+      setData: (type: string, value: string) => store.set(type, value),
+      getData: (type: string) => store.get(type) ?? "",
+      dropEffect: "move",
+      effectAllowed: "move",
+      types: ["text/plain"],
+    };
+
+    // 다른 구분 자리에는 내려놓을 수 없다.
+    fireEvent.dragStart(row("기타 일"), { dataTransfer });
+    fireEvent.dragOver(row("먼저 업무"), { dataTransfer });
+    fireEvent.drop(row("먼저 업무"), { dataTransfer });
+    expect(harness.api.workProjects.reorder).not.toHaveBeenCalled();
+
+    // 같은 구분 안에서는 옮긴다(jsdom의 행 높이가 0이라 늘 "뒤"에 떨어진다).
+    fireEvent.dragStart(row("먼저 업무"), { dataTransfer });
+    fireEvent.dragOver(row("나중 업무"), { dataTransfer });
+    expect(row("나중 업무")).toHaveClass("drop-after");
+    fireEvent.drop(row("나중 업무"), { dataTransfer });
+    await waitFor(() =>
+      expect(harness.api.workProjects.reorder).toHaveBeenCalledWith(["wp-late", "wp-early", "wp-etc"]),
+    );
   });
 
   it("leaves a 미분류 folder on the plain folder icon, having no role to brand it with", async () => {

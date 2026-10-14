@@ -49,6 +49,27 @@ const api: MultiCliWorkApi = {
     chooseTeamsSyncRoot: () => ipcRenderer.invoke("work-projects:choose-teams-root"),
     clearTeamsSyncRoot: () => ipcRenderer.invoke("work-projects:clear-teams-root"),
   },
+  pcRoots: {
+    get: () => ipcRenderer.invoke("pc-roots:get"),
+    redetect: () => ipcRenderer.invoke("pc-roots:redetect"),
+    choose: (key) => ipcRenderer.invoke("pc-roots:choose", key),
+    clear: (key) => ipcRenderer.invoke("pc-roots:clear", key),
+  },
+  profile: {
+    defaultPath: () => ipcRenderer.invoke("profile:default-path"),
+    export: () => ipcRenderer.invoke("profile:export"),
+    preview: () => ipcRenderer.invoke("profile:preview"),
+    apply: () => ipcRenderer.invoke("profile:apply"),
+  },
+  drive: {
+    overview: () => ipcRenderer.invoke("drive:overview"),
+    status: (workProjectId) => ipcRenderer.invoke("drive:status", workProjectId),
+    link: (workProjectId) => ipcRenderer.invoke("drive:link", workProjectId),
+    createFolder: (workProjectId, options) => ipcRenderer.invoke("drive:create-folder", workProjectId, options),
+    importFolders: (names) => ipcRenderer.invoke("drive:import", names),
+    migrateDocs: (workProjectId, projectId) => ipcRenderer.invoke("drive:migrate-docs", workProjectId, projectId),
+    reveal: (workProjectId, subfolder) => ipcRenderer.invoke("drive:reveal", workProjectId, subfolder ?? null),
+  },
   projectTags: {
     list: () => ipcRenderer.invoke("project-tags:list"),
     set: (workProjectId, tags) => ipcRenderer.invoke("project-tags:set", workProjectId, tags),

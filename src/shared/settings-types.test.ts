@@ -309,3 +309,41 @@ describe("remote settings", () => {
     expect(next.remote).toEqual({ enabled: true, port: 47821 });
   });
 });
+
+describe("구분 코드", () => {
+  it("대문자 한 글자만 남기고 소문자는 올리며, 겹치는 코드는 뒤의 것을 버린다", () => {
+    const parsed = parseSettings({
+      projects: {
+        categories: [
+          { name: "정부과제", color: 1, code: "G" },
+          { name: "외주용역", color: 2, code: "o" },
+          { name: "연구개발", color: 3, code: "GG" },
+          { name: "개인", color: 4, code: "G" },
+          { name: "기타", color: 5 },
+        ],
+        defaultCategory: "기타",
+      },
+    });
+    expect(parsed.projects.categories).toEqual([
+      { name: "정부과제", color: 1, code: "G" },
+      { name: "외주용역", color: 2, code: "O" },
+      { name: "연구개발", color: 3 },
+      { name: "개인", color: 4 },
+      { name: "기타", color: 5 },
+    ]);
+  });
+});
+
+describe("PC 루트", () => {
+  it("기본값은 모두 null(자동 탐지)이고, 빈 문자열·문자열 아닌 값은 null로 되돌린다", () => {
+    expect(DEFAULT_SETTINGS.pcRoots).toEqual({ dev: null, data: null, work: null, drive: null });
+    const parsed = parseSettings({ pcRoots: { dev: "  D:\\dev ", data: "", work: 3, drive: "G:\\내 드라이브" } });
+    expect(parsed.pcRoots).toEqual({ dev: "D:\\dev", data: null, work: null, drive: "G:\\내 드라이브" });
+  });
+
+  it("patch는 루트를 필드 단위로 합치고 null로 자동 탐지에 되돌린다", () => {
+    const current = parseSettings({ pcRoots: { dev: "D:\\dev", drive: "G:\\내 드라이브" } });
+    const merged = mergeSettingsPatch(current, { pcRoots: { dev: null, data: "D:\\data" } });
+    expect(merged.pcRoots).toEqual({ dev: null, data: "D:\\data", work: null, drive: "G:\\내 드라이브" });
+  });
+});

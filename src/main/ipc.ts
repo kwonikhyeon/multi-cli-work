@@ -40,6 +40,14 @@ import {
   projectForPath,
 } from "./ipc-validation";
 import { assertNotReviewSession } from "./terminal/review-guard";
+import { PC_ROOT_KEYS, type PcRootKey } from "../shared/settings-types";
+import type { WorkProjectRole } from "../shared/work-project-types";
+import {
+  createDriveProjectFolder,
+  driveNameKey,
+  driveProjectStatus,
+  scanDriveFolders,
+} from "./projects/drive-service";
 import { normalizeWorktreeScripts } from "./projects/worktree-scripts";
 
 export type { IpcRegistrar } from "./ipc-gateways";
@@ -167,16 +175,9 @@ export function registerMainIpc(registrar: IpcRegistrar, dependencies: MainIpcDe
       orderedIds.map((id) => nonEmptyString(id, "Work project id")),
     );
   });
-  // One step for "add a repo/Teams folder to this work project": dialog → register → membership.
-  // The docs picker starts at the Teams sync root so the user lands in the right OneDrive tree.
-  ipc.handle("work-projects:add-member-folder", async (_event, workProjectId: unknown, role: unknown) => {
-    const id = nonEmptyString(workProjectId, "Work project id");
-    const memberRoleValue = memberRole(role);
-    const teamsRoot = (await dependencies.readWorkProjectRegistry()).teamsSyncRoot;
-    const rootPath = await dependencies.chooseDirectory(
-      memberRoleValue === "docs" && teamsRoot ? teamsRoot : undefined,
-    );
-    if (!rootPath) return null;
+  // Register a folder (or reuse its existing entry) and make it a member — shared by the folder
+  // picker and the Drive "link/create" actions.
+  const registerMemberFolder = async (workProjectId: string, rootPath: string, role: WorkProjectRole) => {
     // Same guard as projects:add-folder — a linked worktree directory belongs to its project and
     // must not be registered as a second folder entry.
     const current = await dependencies.readRegistry();
@@ -187,12 +188,26 @@ export function registerMainIpc(registrar: IpcRegistrar, dependencies: MainIpcDe
           await dependencies.projectService.registerManualFolder(rootPath, path.basename(rootPath)),
           rootPath,
         );
-    const workProjects = await dependencies.workProjectService.addMember(id, project.id, memberRoleValue);
+    const workProjects = await dependencies.workProjectService.addMember(workProjectId, project.id, role);
     return { project, workProjects };
+  };
+  // One step for "add a repo/docs folder to this work project": dialog → register → membership.
+  // The docs picker starts at the Drive root (legacy: the Teams sync root); repos start at dev.
+  ipc.handle("work-projects:add-member-folder", async (_event, workProjectId: unknown, role: unknown) => {
+    const id = nonEmptyString(workProjectId, "Work project id");
+    const memberRoleValue = memberRole(role);
+    const roots = dependencies.pcRoots.info().effective;
+    const teamsRoot = (await dependencies.readWorkProjectRegistry()).teamsSyncRoot;
+    const startAt = memberRoleValue === "docs" ? roots.drive ?? teamsRoot ?? undefined : roots.dev ?? undefined;
+    const rootPath = await dependencies.chooseDirectory(startAt);
+    if (!rootPath) return null;
+    return registerMemberFolder(id, rootPath, memberRoleValue);
   });
   // Picks a reference folder without touching either registry: the renderer drops the path into its
   // row and commits it through work-projects:update, so local folders keep a single write path.
-  ipc.handle("work-projects:choose-local-folder", () => dependencies.chooseDirectory());
+  ipc.handle("work-projects:choose-local-folder", () =>
+    dependencies.chooseDirectory(dependencies.pcRoots.info().effective.data ?? undefined),
+  );
   // The renderer names a folder the work project already stores; it never hands over a free path.
   // Same reasoning as projects:reveal resolving a project id rather than accepting a root path.
   ipc.handle("work-projects:reveal-local-folder", async (_event, workProjectId: unknown, folderPath: unknown) => {
@@ -211,6 +226,107 @@ export function registerMainIpc(registrar: IpcRegistrar, dependencies: MainIpcDe
     return dependencies.workProjectService.setTeamsSyncRoot(rootPath);
   });
   ipc.handle("work-projects:clear-teams-root", () => dependencies.workProjectService.setTeamsSyncRoot(null));
+
+  // ── 이 PC의 루트 ──────────────────────────────────────────────────────────────────────────
+  const rootKey = (value: unknown): PcRootKey => {
+    if (!(PC_ROOT_KEYS as readonly unknown[]).includes(value)) throw new Error("PC root key is invalid");
+    return value as PcRootKey;
+  };
+  ipc.handle("pc-roots:get", () => dependencies.pcRoots.info());
+  ipc.handle("pc-roots:redetect", () => dependencies.pcRoots.redetect());
+  ipc.handle("pc-roots:choose", async (_event, key: unknown) => {
+    const rootName = rootKey(key);
+    const chosen = await dependencies.chooseDirectory(dependencies.pcRoots.info().effective[rootName] ?? undefined);
+    if (!chosen) return null;
+    await dependencies.settings.update({ pcRoots: { [rootName]: chosen } });
+    return dependencies.pcRoots.info();
+  });
+  ipc.handle("pc-roots:clear", async (_event, key: unknown) => {
+    await dependencies.settings.update({ pcRoots: { [rootKey(key)]: null } });
+    return dependencies.pcRoots.info();
+  });
+
+  // ── 설정 프로필 ──────────────────────────────────────────────────────────────────────────
+  ipc.handle("profile:default-path", () => dependencies.profile.defaultPath());
+  ipc.handle("profile:export", () => dependencies.profile.exportProfile());
+  ipc.handle("profile:preview", () => dependencies.profile.previewImport());
+  ipc.handle("profile:apply", () => dependencies.profile.applyImport());
+
+  // ── Google Drive: 업무 프로젝트 ↔ 드라이브 최상위 폴더(이름이 같으면 연결) ─────────────────────
+  const driveRoot = () => dependencies.pcRoots.info().effective.drive;
+  const requireDriveRoot = () => {
+    const root = driveRoot();
+    if (root === null) throw new Error("이 PC의 Google Drive 폴더가 지정되지 않았습니다 (설정 › PC · 프로필)");
+    return root;
+  };
+  const workProjectById = async (value: unknown) => {
+    const id = nonEmptyString(value, "Work project id");
+    const workProject = (await dependencies.readWorkProjectRegistry()).workProjects[id];
+    if (!workProject) throw new Error(`Work project ${id} was not found`);
+    return workProject;
+  };
+  const driveStatusOf = async (workProjectId: unknown) => {
+    const workProject = await workProjectById(workProjectId);
+    const { registry } = await dependencies.readRegistry();
+    return driveProjectStatus({ root: driveRoot(), workProject, projects: registry.projects });
+  };
+  const driveOverview = async (root: string | null) =>
+    scanDriveFolders(
+      root,
+      dependencies.settings.get().projects.categories,
+      Object.values((await dependencies.readWorkProjectRegistry()).workProjects),
+    );
+  ipc.handle("drive:overview", () => driveOverview(driveRoot()));
+  ipc.handle("drive:status", (_event, workProjectId: unknown) => driveStatusOf(workProjectId));
+  ipc.handle("drive:link", async (_event, workProjectId: unknown) => {
+    const status = await driveStatusOf(workProjectId);
+    if (status.folderPath === null || !status.exists) throw new Error("드라이브에 같은 이름의 폴더가 없습니다");
+    return registerMemberFolder(nonEmptyString(workProjectId, "Work project id"), status.folderPath, "docs");
+  });
+  ipc.handle("drive:create-folder", async (_event, workProjectId: unknown, options: unknown) => {
+    const workProject = await workProjectById(workProjectId);
+    const parsed = exactObject(options, ["template"], "Drive folder options");
+    const folderPath = await createDriveProjectFolder(requireDriveRoot(), workProject.name, workProject.category, {
+      template: booleanValue(parsed.template, "Drive folder template"),
+    });
+    return registerMemberFolder(workProject.id, folderPath, "docs");
+  });
+  // 드라이브에 있지만 업무 프로젝트가 없는 폴더들을 한 번에 업무 프로젝트로 — 구분은 접두 코드로.
+  ipc.handle("drive:import", async (_event, names: unknown) => {
+    if (!Array.isArray(names) || names.length === 0) throw new Error("Drive folder names must be a non-empty array");
+    const wanted = new Set(names.map((name) => driveNameKey(nonEmptyString(name, "Drive folder name"))));
+    const root = requireDriveRoot();
+    const overview = await driveOverview(root);
+    for (const folder of overview.folders) {
+      if (!wanted.has(driveNameKey(folder.name)) || folder.workProjectId !== null) continue;
+      const before = new Set(Object.keys((await dependencies.readWorkProjectRegistry()).workProjects));
+      const registry = await dependencies.workProjectService.createWorkProject({
+        name: folder.name,
+        ...(folder.category !== null ? { category: folder.category } : {}),
+      });
+      const created = Object.keys(registry.workProjects).find((id) => !before.has(id));
+      if (created) await registerMemberFolder(created, path.join(root, folder.name), "docs");
+    }
+    return dependencies.readWorkProjectRegistry();
+  });
+  // Teams·OneDrive에 남은 문서 폴더를 드라이브의 같은 이름 폴더로 옮겨 단다 — 폴더 항목의 경로만
+  // 바꾸므로 세션·메모·순서는 그대로다. 제안 경로가 없는 항목은 거부한다(자유 경로를 받지 않는다).
+  ipc.handle("drive:migrate-docs", async (_event, workProjectId: unknown, projectId: unknown) => {
+    const id = nonEmptyString(projectId, "Project id");
+    const status = await driveStatusOf(workProjectId);
+    const legacy = status.legacyDocs.find((entry) => entry.projectId === id);
+    if (!legacy?.suggestedPath) throw new Error("드라이브에 옮겨 갈 폴더가 없습니다");
+    return selectedProject(await dependencies.projectService.relinkProject(id, legacy.suggestedPath), id);
+  });
+  ipc.handle("drive:reveal", async (_event, workProjectId: unknown, subfolder: unknown) => {
+    const status = await driveStatusOf(workProjectId);
+    if (status.folderPath === null || !status.exists) throw new Error("드라이브 폴더가 없습니다");
+    if (subfolder === undefined || subfolder === null) return dependencies.projectActions.reveal(status.folderPath);
+    const name = nonEmptyString(subfolder, "Drive subfolder");
+    const match = status.subfolders.find((candidate) => candidate.name === name);
+    if (!match) throw new Error(`드라이브 하위 폴더가 없습니다: ${name}`);
+    return dependencies.projectActions.reveal(match.path);
+  });
 
   ipc.handle("project-tags:list", () => dependencies.projectTags.list());
   ipc.handle("project-tags:set", async (_event, workProjectId: unknown, tags: unknown) => {
