@@ -285,6 +285,7 @@ git commit -m "feat: add zsh builtin agent as the macOS shell"
   - `effectiveAccelerator(actionId: string, overrides: Record<string, string | null>, platform: NodeJS.Platform): string | null`
   - `resolveKeymap(overrides: Record<string, string | null>, platform: NodeJS.Platform): Map<string, KeymapAction>`
   - `findConflict(accelerator: string, overrides: Record<string, string | null>, excludeActionId: string, platform: NodeJS.Platform): KeymapAction | null`
+  - `isBindableAccelerator(accelerator: string, platform: NodeJS.Platform): boolean` — darwin에서는 `Cmd`도 충분한 수식키로 인정한다.
 - 설계 결정: 저장 포맷은 그대로(토큰 문자열). darwin 기본값은 `Ctrl→Cmd` 일괄 치환 + 아래 예외 맵. **실제 Ctrl 조합은 darwin에서 터미널로 흘러간다**(readline 보호).
 
 - [ ] **Step 1: 실패하는 테스트 추가**
@@ -322,6 +323,13 @@ describe("darwin keymap", () => {
     const keymap = resolveKeymap({}, "darwin");
     expect(keymap.get("Cmd+P")?.id).toBe("view.quick-open");
     expect(keymap.get("Ctrl+P")).toBeUndefined();
+  });
+
+  it("darwin에서 Cmd 단독도 리바인딩 가능한 수식키다", () => {
+    expect(isBindableAccelerator("Cmd+K", "darwin")).toBe(true);
+    expect(isBindableAccelerator("Cmd+Shift+U", "darwin")).toBe(true);
+    expect(isBindableAccelerator("Cmd+K", "win32")).toBe(false); // win32에서는 Cmd 토큰이 나오지 않는다
+    expect(isBindableAccelerator("Shift+A", "darwin")).toBe(false); // Shift만으로는 여전히 부족
   });
 });
 ```
@@ -376,12 +384,27 @@ export function defaultAcceleratorFor(action: KeymapAction, platform: NodeJS.Pla
 
 `effectiveAccelerator`·`resolveKeymap`·`findConflict`에 `platform` 매개변수를 추가하고, 내부의 `found.defaultAccelerator`/`candidate` 기본값 읽기를 전부 `defaultAcceleratorFor(found, platform)` 호출로 바꾼다. (fixed 액션도 `defaultAcceleratorFor`를 거친다 — darwin에서 `Cmd+C` 라벨이 나오게.)
 
+`isBindableAccelerator`도 플랫폼을 받아야 한다. 지금은 `Ctrl`·`Alt`만 유효 수식키로 인정하므로, darwin에서 사용자가 `Cmd+K`를 누르면 `normalizeKeyEvent`가 `"Cmd+K"`를 내고 이 함수가 거부해 **Cmd 조합 리바인딩이 전부 막힌다**(인자가 string이라 타입 검사로는 드러나지 않는다):
+
+```ts
+export function isBindableAccelerator(accelerator: string, platform: NodeJS.Platform): boolean {
+  const parts = accelerator.split("+");
+  const key = parts[parts.length - 1] ?? "";
+  const modifiers = new Set(parts.slice(0, -1));
+  if (/^F([1-9]|1[0-2])$/.test(key)) return true;
+  // Shift만으로는 부족하다 — Shift+문자는 곧 대문자 타이핑이다. Ctrl이나 Alt가 있어야 한다.
+  // darwin은 Cmd가 앱 단축키의 수식키다.
+  if (platform === "darwin" && modifiers.has("Cmd")) return true;
+  return modifiers.has("Ctrl") || modifiers.has("Alt");
+}
+```
+
 - [ ] **Step 4: 호출부 수정**
 
 - `use-app-shortcuts.ts`: 훅 상단에 `const platform = window.multiCliWork.platform;` 추가, `resolveKeymap(keybindings, platform)`·`normalizeKeyEvent(event, platform)`로 변경.
 - `title-bar-menu.ts`: `buildTitleBarMenus(context, keybindings = {}, platform: NodeJS.Platform)`으로 시그니처 확장, `shortcutFor`가 `effectiveAccelerator(actionId, keybindings, platform)`을 쓰게.
 - `App.tsx`: `buildTitleBarMenus(...)` 호출부에 `window.multiCliWork.platform` 전달.
-- `SettingsDialog.tsx`: 컴포넌트 상단에 `const platform = window.multiCliWork.platform;`를 두고 868행(기본값 표시)·889행/923행(`normalizeKeyEvent(event, platform)`)·895행(`findConflict(..., platform)`)·1301행 근처 목록 렌더에서 `candidate.defaultAccelerator`를 읽는 자리를 `defaultAcceleratorFor(candidate, platform)`으로 교체.
+- `SettingsDialog.tsx`: 컴포넌트 상단에 `const platform = window.multiCliWork.platform;`를 두고 868행(기본값 표시)·889행/923행(`normalizeKeyEvent(event, platform)`)·891행(`isBindableAccelerator(accelerator, platform)`)·895행(`findConflict(..., platform)`)·1301행 근처 목록 렌더에서 `candidate.defaultAccelerator`를 읽는 자리를 `defaultAcceleratorFor(candidate, platform)`으로 교체.
 - `title-bar-menu.test.ts` 등 기존 테스트의 호출부에는 `"win32"`를 넘겨 기대값 불변을 확인한다.
 
 Run: `npm run typecheck`
@@ -467,6 +490,12 @@ const shortcutFor = (actionId: string): string | undefined => {
 ```
 
 `SettingsDialog.tsx` 단축키 탭에서 지금 단축키/기본값 문자열을 그리는 자리(1301행 근처 목록 행)도 `acceleratorLabel(<문자열>, platform)`로 감싼다. **입력 캡처 저장 값은 그대로** 토큰 문자열이다(라벨만 변환).
+
+같은 파일 897행 근처의 충돌 안내도 토큰을 그대로 노출한다 — 표기를 일관되게 맞춘다(`platform`은 Task 5에서 이미 이 컴포넌트 상단에 있다):
+
+```tsx
+        setCaptureNotice(`${acceleratorLabel(accelerator, platform)}는 ${existing.label}의 고정 키입니다`);
+```
 
 - [ ] **Step 4: 통과 확인**
 
