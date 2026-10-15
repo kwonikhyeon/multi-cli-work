@@ -536,6 +536,12 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
   });
 
   test("pastes each Ctrl+V shortcut exactly once from Electron's native clipboard", async () => {
+    test.skip(
+      MAC,
+      "macOS는 붙여넣기 제스처가 Cmd+V 하나뿐이고, Ctrl+V와 Ctrl+C는 터미널(PTY)에 바인딩되어 있다 — 각각 " +
+        "quoted-insert, SIGINT로 동작한다. 이 테스트가 검증하는 Ctrl+V/Ctrl+Shift+V/Ctrl+C/Ctrl+Shift+C " +
+        "클립보드 단축키 자체가 macOS에는 없다.",
+    );
     await openFolder();
     await page.getByRole("button", { name: `새 ${SHELL_LABEL} 세션` }).click();
     // The new session joins the folder's grid, and this test drives a single PTY — solo it.
