@@ -78,4 +78,15 @@ describe("update badge", () => {
     expect(harness.updates.openReleases).toHaveBeenCalledOnce();
     expect(harness.updates.check).not.toHaveBeenCalled();
   });
+
+  it("manual 상태에서는 릴리스 링크 버튼을 보여준다", async () => {
+    const harness = createUpdatesApi({ state: "manual" });
+
+    render(<UpdateBadge />);
+
+    expect(await screen.findByRole("button", { name: "릴리스" })).toBeInTheDocument();
+    expect(screen.getByText("수동 업데이트")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "릴리스" }));
+    expect(harness.updates.openReleases).toHaveBeenCalledOnce();
+  });
 });

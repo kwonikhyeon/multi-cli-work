@@ -296,7 +296,8 @@ export type UpdaterStatus =
   | { state: "available"; version: string }
   | { state: "downloading"; percent: number }
   | { state: "downloaded"; version: string }
-  | { state: "error"; message: string };
+  | { state: "error"; message: string }
+  | { state: "manual" };
 
 export interface MultiCliWorkApi {
   /** Claude·Codex 구독 사용량(타이틀바 게이지). */

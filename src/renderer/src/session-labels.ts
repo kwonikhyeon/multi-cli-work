@@ -72,6 +72,8 @@ export function updaterStatusLabel(status: UpdaterStatus): string {
       return `${status.version} 업데이트 설치 준비 완료`;
     case "error":
       return "업데이트 확인 실패";
+    case "manual":
+      return "수동 업데이트";
     default:
       return "최신 버전";
   }

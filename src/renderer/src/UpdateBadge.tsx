@@ -23,7 +23,7 @@ export function UpdateBadge() {
       <RefreshCw size={12} className={busy ? "spinning" : undefined} aria-hidden="true" />
       <span className="app-version">{version ? `v${version}` : ""}</span>
       <span className={`update-status ${status.state}`}>{updaterStatusLabel(status)}</span>
-      {status.state === "error" ? (
+      {status.state === "error" || status.state === "manual" ? (
         <button type="button" onClick={() => void window.multiCliWork.updates.openReleases()}>
           릴리스
         </button>
