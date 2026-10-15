@@ -20,6 +20,7 @@ async function rendererDir(withBundle = true) {
     await mkdir(path.join(dir, "assets"));
     await writeFile(path.join(dir, "mobile.html"), "<!doctype html><title>mobile</title>");
     await writeFile(path.join(dir, "assets", "mobile-abc.js"), "console.log(1)");
+    await writeFile(path.join(dir, "apple-touch-icon.png"), "png");
   }
   return dir;
 }
@@ -58,6 +59,16 @@ describe("startRemoteServer", () => {
     const root = await fetch(`${base}/`, { redirect: "manual" });
     expect(root.status).toBe(302);
     expect(root.headers.get("location")).toBe("/mobile/");
+  });
+
+  it("serves the apple touch icon from the renderer root", async () => {
+    const { base } = await start();
+    const response = await fetch(`${base}/mobile/apple-touch-icon.png`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    // 아이콘이 없는 번들에서는 404 — serveFile 실패 분기도 함께 고정한다.
+    const { base: bare } = await start({ withBundle: false });
+    expect((await fetch(`${bare}/mobile/apple-touch-icon.png`)).status).toBe(404);
   });
 
   it("refuses path traversal and unknown paths", async () => {

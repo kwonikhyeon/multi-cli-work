@@ -166,6 +166,11 @@ async function handleRequest(options: RemoteServerOptions, request: http.Incomin
     if (!served) send(response, 503, "모바일 화면 번들이 없습니다. 호스트에서 npm run build를 먼저 실행하세요.");
     return;
   }
+  if (pathname === "/mobile/apple-touch-icon.png") {
+    const served = await serveFile(response, path.join(options.rendererDir, "apple-touch-icon.png"), "public, max-age=86400");
+    if (!served) send(response, 404, "없는 경로입니다");
+    return;
+  }
   const assetPrefix = "/mobile/assets/";
   if (pathname.startsWith(assetPrefix)) {
     const name = decodeURIComponent(pathname.slice(assetPrefix.length));
