@@ -1092,15 +1092,24 @@ Expected: 180×180 PNG 생성. `npm run build` 후 `ls out/renderer/apple-touch-
 
 - [ ] **Step 2: 실패하는 테스트 추가**
 
-`remote-server.test.ts`의 기존 정적 서빙 테스트(rendererDir 픽스처를 만드는 헬퍼)를 본떠:
+`remote-server.test.ts`의 픽스처 헬퍼 `rendererDir`(17행)의 `withBundle` 블록에 더미 아이콘을 추가한다. 확장자만 보고 content-type을 정하므로 내용은 아무 문자열이어도 된다:
 
 ```ts
-it("serves the apple touch icon from the renderer root", async () => {
-  // 기존 헬퍼로 rendererDir에 apple-touch-icon.png 더미 파일을 쓴 뒤 서버 시작
-  const response = await fetch(`http://${host}:${port}/mobile/apple-touch-icon.png`);
-  expect(response.status).toBe(200);
-  expect(response.headers.get("content-type")).toBe("image/png");
-});
+    await writeFile(path.join(dir, "apple-touch-icon.png"), "png");
+```
+
+그리고 테스트를 추가한다. 이 파일의 관례는 `start()`가 돌려주는 `base`를 쓰는 것이다(`host`·`port` 변수는 없다):
+
+```ts
+  it("serves the apple touch icon from the renderer root", async () => {
+    const { base } = await start();
+    const response = await fetch(`${base}/mobile/apple-touch-icon.png`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    // 아이콘이 없는 번들에서는 404 — serveFile 실패 분기도 함께 고정한다.
+    const { base: bare } = await start({ withBundle: false });
+    expect((await fetch(`${bare}/mobile/apple-touch-icon.png`)).status).toBe(404);
+  });
 ```
 
 - [ ] **Step 3: 실패 확인**
@@ -1154,6 +1163,15 @@ git commit -m "feat: home-screen metadata for the iPhone web companion"
 body { background: var(--m-bg); color: var(--m-text); font: 15px/1.4 system-ui, sans-serif; padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 ```
 
+`body` 패딩만으로는 `.m-toast`(81행)가 남는다 — `position: fixed`는 뷰포트 기준이라 body 패딩을 벗어나므로
+가로 모드에서 토스트가 노치 아래로 들어간다. 같은 규칙의 `left`·`right`도 함께 바꾼다:
+
+```css
+.m-toast { position: fixed; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); z-index: 10; display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border: 1px solid #ff6b6b; border-radius: 8px; background: var(--m-surface); color: var(--m-text); }
+```
+
+(`.m-toast`가 이 파일의 유일한 `position: fixed`다 — 다른 고정 요소는 없다.)
+
 - [ ] **Step 2: 데스크톱 회귀 확인**
 
 Run: `npx vitest run src/renderer/src/mobile && npm run build`
@@ -1174,13 +1192,26 @@ git commit -m "feat: respect iPhone safe areas in the mobile ui"
 
 - [ ] **Step 1: 실패하는 테스트 추가**
 
+이 파일의 관례대로 `start()`가 돌려주는 `base`를 쓴다(`host`·`port` 변수는 없다). `start()`의 `shell`
+기본값은 `null`이므로 APK 동봉 분기를 타려면 70행 테스트처럼 `ShellArtifact`를 직접 만들어 넘겨야 한다.
+`installPage`는 분기가 둘이고 iPhone 안내는 둘 다에 있어야 하므로 양쪽을 다 건다:
+
 ```ts
-it("install page explains the iPhone home-screen flow", async () => {
-  const response = await fetch(`http://${host}:${port}/install`);
-  const html = await response.text();
-  expect(html).toContain("홈 화면에 추가");
-  expect(html).toContain("/mobile/");
-});
+  it("install page explains the iPhone home-screen flow on both branches", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcw-shell-"));
+    await writeFile(path.join(dir, "shell.apk"), "APKBYTES");
+    const shell = { release: { versionCode: 3, versionName: "0.3.0", sha256: "b".repeat(64) }, apkPath: path.join(dir, "shell.apk") };
+
+    const bundled = await start({ shell });
+    const withApk = await (await fetch(`${bundled.base}/install`)).text();
+    expect(withApk).toContain("홈 화면에 추가");
+    expect(withApk).toContain('href="/mobile/"');
+    expect(withApk).toContain("<h2>Android</h2>");
+
+    // APK가 동봉되지 않은 빌드에서도 iPhone 절차는 남아야 한다.
+    const bare = await start({ shell: null });
+    expect(await (await fetch(`${bare.base}/install`)).text()).toContain("홈 화면에 추가");
+  });
 ```
 
 - [ ] **Step 2: 실패 확인**
@@ -1201,7 +1232,13 @@ Expected: FAIL
 </ol>`;
 ```
 
-기존 `body` 할당의 Android 안내는 `<h2>Android</h2>` 제목을 달아 구분하고, `return` 템플릿의 `${body}`를 `${body}${iphone}`으로 바꾼다.
+`body` 삼항의 **양쪽 분기 모두** 맨 앞에 `<h2>Android</h2>`를 붙여 구분한다(APK 없음 안내도 Android 쪽 이야기다 —
+한쪽만 달면 iPhone 제목 혼자 떠서 문서 구조가 어긋난다). 그리고 `return` 템플릿(130행)의 `${body}`를
+`${body}${iphone}`으로 바꾼다.
+
+3번 항목의 "7일 미사용 정리"는 우리 코드의 만료 로직이 아니라 **Safari ITP가 스크립트 기록 저장소(localStorage)를
+7일 미사용 시 비우는 동작**을 가리킨다. 페어링 토큰은 `remote-client.ts`가 `localStorage`의 `mcw.remote.pairing`에
+저장하고(`MobileApp.tsx:35`), 홈 화면 웹앱은 이 정리 대상에서 제외된다 — 문장은 그대로 둔다.
 
 - [ ] **Step 4: 통과 확인 + Commit**
 
