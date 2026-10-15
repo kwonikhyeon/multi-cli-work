@@ -117,17 +117,25 @@ function escapeHtml(text: string): string {
 /** 폰 브라우저가 처음 한 번 여는 페이지. 스크립트 없이 링크와 안내만 있다. */
 function installPage(shell: ShellArtifact | null): string {
   const body = shell
-    ? `<p><a class="button" href="/shell.apk">모바일 앱 받기 (v${escapeHtml(shell.release.versionName)})</a></p>
+    ? `<h2>Android</h2>
+<p><a class="button" href="/shell.apk">모바일 앱 받기 (v${escapeHtml(shell.release.versionName)})</a></p>
 <ol>
 <li>받은 파일을 열고, "이 출처의 앱 설치 허용"을 켠 뒤 설치합니다.</li>
 <li>앱에서 <b>QR로 PC 추가</b>를 누르고 PC의 설정 ▸ 원격 ▸ 기기 추가 QR을 찍습니다.</li>
 <li>이후 업데이트는 앱이 PC에서 직접 받아 설치합니다.</li>
 </ol>`
-    : "<p>이 PC 설치본에는 모바일 앱이 들어 있지 않습니다. 릴리스 설치본을 쓰거나 개발 빌드에서 build/mobile을 준비하세요.</p>";
+    : `<h2>Android</h2>
+<p>이 PC 설치본에는 모바일 앱이 들어 있지 않습니다. 릴리스 설치본을 쓰거나 개발 빌드에서 build/mobile을 준비하세요.</p>`;
+  const iphone = `<h2>iPhone</h2>
+<ol>
+<li>iPhone에 Tailscale을 설치하고 이 PC와 같은 tailnet에 로그인합니다.</li>
+<li>Safari에서 이 주소의 <a href="/mobile/">/mobile/</a>을 열고 PC의 설정 ▸ 원격 ▸ 기기 추가 코드를 입력합니다.</li>
+<li>공유 ▸ <b>홈 화면에 추가</b>로 설치하면 전체 화면으로 열리고, 페어링이 7일 미사용 정리 없이 유지됩니다.</li>
+</ol>`;
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>멀티 터미널 작업기 모바일 설치</title>
-<style>body{font:16px/1.5 system-ui,sans-serif;background:#101214;color:#e6e6e6;margin:0;padding:24px}a.button{display:inline-block;padding:12px 16px;border-radius:8px;background:#4c8dff;color:#fff;text-decoration:none}</style>
-</head><body><h1>모바일 앱 설치</h1>${body}</body></html>`;
+<style>body{font:16px/1.5 system-ui,sans-serif;background:#101214;color:#e6e6e6;margin:0;padding:24px}a{color:#4c8dff}a.button{display:inline-block;padding:12px 16px;border-radius:8px;background:#4c8dff;color:#fff;text-decoration:none}</style>
+</head><body><h1>모바일 앱 설치</h1>${body}${iphone}</body></html>`;
 }
 
 async function handleRequest(options: RemoteServerOptions, request: http.IncomingMessage, response: http.ServerResponse) {

@@ -112,6 +112,22 @@ describe("startRemoteServer", () => {
     expect(await install.text()).toContain("모바일 앱이 들어 있지 않습니다");
   });
 
+  it("install page explains the iPhone home-screen flow on both branches", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcw-shell-"));
+    await writeFile(path.join(dir, "shell.apk"), "APKBYTES");
+    const shell = { release: { versionCode: 3, versionName: "0.3.0", sha256: "b".repeat(64) }, apkPath: path.join(dir, "shell.apk") };
+
+    const bundled = await start({ shell });
+    const withApk = await (await fetch(`${bundled.base}/install`)).text();
+    expect(withApk).toContain("홈 화면에 추가");
+    expect(withApk).toContain('href="/mobile/"');
+    expect(withApk).toContain("<h2>Android</h2>");
+
+    // APK가 동봉되지 않은 빌드에서도 iPhone 절차는 남아야 한다.
+    const bare = await start({ shell: null });
+    expect(await (await fetch(`${bare.base}/install`)).text()).toContain("홈 화면에 추가");
+  });
+
   it("503 when the mobile bundle is missing", async () => {
     const { base } = await start({ withBundle: false });
     const response = await fetch(`${base}/mobile/`);
