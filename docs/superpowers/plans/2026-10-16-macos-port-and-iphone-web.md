@@ -921,9 +921,24 @@ git commit -m "feat: template tray icon for the macOS menu bar"
 ### Task 11: dist:mac 패키징
 
 **Files:**
+- Create: `build/icon-mac.png` (1024×1024)
 - Modify: `package.json` (`scripts` + `build`)
 
-- [ ] **Step 1: 스크립트와 빌드 설정 추가**
+- [ ] **Step 1: macOS 전용 아이콘 자산 만들기**
+
+기존 `build/icon.png`는 **256×256**이다. electron-builder는 icns 변환의 하한이 512이고
+(`app-builder-lib/out/util/iconConverter.js`의 `const recommendedMin = format === "icns" ? 512 : 256`),
+미달이면 `ERR_ICON_TOO_SMALL`을 던져 **빌드를 중단한다**(linux는 하한이 256이라 통과한다).
+그래서 `build/icon.png`는 **그대로 두고**(win/linux 산출물 불변) 별도 파일을 만든다:
+
+```bash
+sips -z 1024 1024 build/icon.png --out build/icon-mac.png
+```
+
+(256→1024 업스케일이라 큰 사이즈에서 다소 뭉개진다. Dock·Finder 선명도는 Task 13 체크리스트에
+"고해상도 원본으로 교체" 항목으로 남기고, 지금은 브랜딩 없는 기본 Electron 아이콘을 피하는 것이 목적이다.)
+
+- [ ] **Step 2: 스크립트와 빌드 설정 추가**
 
 `scripts`의 `dist:linux:x64` 아래에:
 
@@ -940,7 +955,7 @@ git commit -m "feat: template tray icon for the macOS menu bar"
         { "target": "zip", "arch": ["arm64"] }
       ],
       "category": "public.app-category.developer-tools",
-      "icon": "build/icon.png",
+      "icon": "build/icon-mac.png",
       "identity": null,
       "artifactName": "Multi-CLI-Work-${version}-mac-${arch}.${ext}"
     },
@@ -948,19 +963,19 @@ git commit -m "feat: template tray icon for the macOS menu bar"
 
 (zip 타깃은 Phase 4에서 자동 업데이트를 켤 때 필요하므로 지금부터 함께 만든다. `identity: null`은 ad-hoc 서명.)
 
-- [ ] **Step 2: 빌드 실행**
+- [ ] **Step 3: 빌드 실행**
 
 Run: `npm run dist:mac`
 Expected: `release/`에 `Multi-CLI-Work-1.48.0-mac-arm64.dmg`와 `.zip` 생성. `build/mobile`이 없다는 electron-builder 경고는 정상(로컬 dist는 셸 APK 미동봉 — 기존 win/linux와 동일).
 
-- [ ] **Step 3: 설치본 수동 검증**
+- [ ] **Step 4: 설치본 수동 검증**
 
 ① dmg를 열어 앱을 `/Applications`에 복사 ② Finder에서 **우클릭 → 열기**(Gatekeeper 통과) ③ zsh 세션 생성·입출력 ④ 창 닫기 → 메뉴바 트레이에서 복귀 ⑤ 업데이트 배지가 `수동 업데이트` + `릴리스` 버튼인지 ⑥ 알림: 세션 하나를 입력 대기 상태로 두고 창을 숨겨 데스크톱 알림이 오는지(첫 알림에서 OS 권한 허용). 알림이 안 오면 시스템 설정 › 알림에서 앱 허용 상태를 확인하고 결과를 기록한다.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add package.json
+git add package.json build/icon-mac.png
 git commit -m "feat: add macOS dmg/zip packaging target"
 ```
 
@@ -970,6 +985,8 @@ git commit -m "feat: add macOS dmg/zip packaging target"
 - Modify: `e2e/*.spec.ts` (필요한 곳만), `playwright.config.ts`(필요시)
 
 **배경:** e2e의 플랫폼 분기는 전부 `win32` vs 나머지라 macOS는 bash 경로를 탄다. `session-workspace.spec.ts`(PowerShell 전용)와 `codex-resume.spec.ts`(Windows 런처 전용)는 이미 비Windows에서 skip된다.
+
+`test:e2e:smoke`는 `playwright test --grep @smoke`이고 **`@smoke` 태그는 `desktop.spec.ts`의 9개 테스트에만** 붙어 있다. 즉 Step 2의 `session-activity.spec.ts` 수정은 스모크로 검증되지 않으므로 그 파일은 따로 돌린다.
 
 - [ ] **Step 1: 스모크 실행**
 
@@ -988,10 +1005,51 @@ Expected: 통과가 목표. 실패가 있으면 실패 목록을 기록한다.
 
 3. **macOS에서 의미 없는 시나리오**(Windows 설치본 동작 등)만 `test.skip(process.platform === "darwin", "<구체적 이유>")`로 스킵한다. 이유 없는 스킵 금지.
 
-- [ ] **Step 3: 전체 스모크 재실행**
+**이미 확인된 실패 둘 — `desktop.spec.ts`의 "@smoke drives the app from its own title bar"(722행).**
+앞선 태스크가 바꾼 동작을 그대로 반영하므로 둘 다 2번(테스트의 OS 가정) 처리다. 스킵하지 않는다.
+
+`desktop.spec.ts:12`의 `const WINDOWS = …` 옆에 추가:
+
+```ts
+const MAC = process.platform === "darwin";
+```
+
+① 723행 `expect(await app.evaluate(({ Menu }) => Menu.getApplicationMenu() === null)).toBe(true);`
+— Task 9에서 darwin은 role 전용 메뉴를 설정하므로 null이 아니다. 다음으로 교체:
+
+```ts
+    if (MAC) {
+      // Task 9: macOS는 Cmd+Q/C/V와 받아쓰기를 살리려고 role 전용 메뉴만 둔다 — 앱을 구동하는 메뉴가 아니다.
+      expect(await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.length ?? 0)).toBe(3);
+    } else {
+      expect(await app.evaluate(({ Menu }) => Menu.getApplicationMenu() === null)).toBe(true);
+    }
+```
+
+② 734-736행의 `["최소화", "최대화", "닫기"]` 버튼 단정 — `TitleBar.tsx:264`가 `{isMac ? null : (…)}`이라
+darwin에는 버튼이 **존재하지 않는다**(Task 2·3의 네이티브 신호등). 다음으로 교체:
+
+```ts
+    if (MAC) {
+      // hiddenInset 창의 네이티브 신호등이 그 자리를 대신한다(Task 2·3).
+      await expect(titleBar.locator(".window-controls")).toHaveCount(0);
+    } else {
+      for (const label of ["최소화", "최대화", "닫기"]) {
+        await expect(titleBar.getByRole("button", { name: label })).toBeVisible();
+      }
+    }
+```
+
+같은 테스트 730행의 `expect(geometry).toEqual({ top: 0, height: 35 })`는 **건드리지 않는다** —
+`index.css:325`의 `.title-bar-mac { padding-left: 76px; }`는 좌측 패딩만 바꾸고 높이·top은 그대로다.
+
+- [ ] **Step 3: 전체 스모크 재실행 + 비스모크 회귀**
 
 Run: `npm run test:e2e:smoke`
 Expected: PASS (스킵 제외). 남는 실패가 있으면 그 목록과 원인을 커밋 메시지 본문에 남기고 다음 태스크로 넘어가지 않는다.
+
+Run: `npx playwright test e2e/session-activity.spec.ts`
+Expected: PASS — Step 2에서 바꾼 zsh kind 선택이 실제로 통하는지 확인한다(스모크에 포함되지 않는 파일).
 
 - [ ] **Step 4: Commit**
 
