@@ -881,7 +881,7 @@ export class TerminalCoordinator {
       !event.generation || event.generation !== this.generations.get(view.id)) return;
     const at = Date.parse(event.at);
     if (!Number.isFinite(at) || at < (this.workspaceEventTimes.get(view.id) ?? 0)) return;
-    if (view.kind === "powershell" || view.kind === "bash") {
+    if (view.kind === "powershell" || view.kind === "bash" || view.kind === "zsh") {
       if (event.provider === "shell" && event.event === "ShellReady") {
         this.shellProviders.delete(view.id);
       } else {

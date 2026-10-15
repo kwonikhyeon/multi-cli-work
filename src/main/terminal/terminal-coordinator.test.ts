@@ -1580,7 +1580,13 @@ describe("worktree sessions", () => {
     updatedAt: "2026-07-13T00:00:00.000Z",
   };
 
-  function worktreeCoordinator(root: string, options: { worktreeGone?: boolean } = {}) {
+  function worktreeCoordinator(
+    root: string,
+    options: {
+      worktreeGone?: boolean;
+      readWorkspace?: (transcriptPath: string, since?: string) => Promise<string | null>;
+    } = {},
+  ) {
     let nextId = 0;
     const worker = new FakeWorker();
     const instance = new TerminalCoordinator({
@@ -1594,11 +1600,12 @@ describe("worktree sessions", () => {
         ? { cwd, worktreeId: worktree.id }
         : cwd === project.rootPath ? { cwd } : null,
       getExecutables: async () => ({
-        agents: { powershell: "powershell.exe", claude: "claude.exe", codex: "codex.cmd" },
+        agents: { powershell: "powershell.exe", zsh: "/bin/zsh", claude: "claude.exe", codex: "codex.cmd" },
         vscode: null,
       }),
       getAgent: (agentId) => BUILTIN_AGENTS[agentId as BuiltinAgentId] ?? null,
       toolSessionCwd: () => "C:\\Users\\me",
+      readWorkspace: options.readWorkspace,
       env: {},
       idFactory: () => `session-${++nextId}`,
       now: () => "2026-07-13T01:00:00.000Z",
@@ -1652,6 +1659,51 @@ describe("worktree sessions", () => {
     expect(instance.list()[0].worktreeId).toBeUndefined();
     expect((await instance.state()).state.sessions[session.id]).not.toHaveProperty("worktreeId");
     expect(worker.create).toHaveBeenCalledTimes(1);
+  });
+
+  // No existing test exercises `shellProviders`/`refreshWorkspaces` at all — the PowerShell test
+  // above only drives the direct-cwd path, which never touches that map. This is the regression
+  // test for widening the plain-shell check to zsh: a codex conversation nested inside a zsh
+  // session only has its workspace discovered by polling the transcript `shellProviders` points
+  // at, so the assertions below fail outright (readWorkspace never called, worktreeId never set)
+  // unless zsh is included beside powershell/bash in that check.
+  it("tracks a codex conversation nested inside a zsh session through shellProviders", async () => {
+    const root = await tempRoot();
+    const transcriptPath = "C:\\Users\\me\\.codex\\sessions\\zsh-nested.jsonl";
+    const at = new Date().toISOString();
+    const readWorkspace = vi.fn(async (transcript: string) => (transcript === transcriptPath ? worktree.path : null));
+    const { instance, worker } = worktreeCoordinator(root, { readWorkspace });
+    await instance.initialize();
+    const session = await instance.create({ projectId: project.id, kind: "zsh", cols: 80, rows: 24 });
+    const generation = worker.create.mock.calls[0][0].generation!;
+
+    // No `cwd` on this event: it only reports that a codex conversation is now running inside the
+    // zsh shell, which should record ownership in `shellProviders`. The cwd itself arrives later,
+    // through `refreshWorkspaces()` polling the transcript this event points at.
+    instance.applyProviderStatus({
+      sessionId: session.id,
+      status: "working",
+      event: "PostToolUse",
+      at,
+      provider: "codex",
+      providerConversationId: "codex-nested",
+      transcriptPath,
+      generation,
+    });
+    await instance.flush();
+    expect(readWorkspace).not.toHaveBeenCalled();
+    expect(instance.list()[0].worktreeId).toBeUndefined();
+
+    await instance.refreshWorkspaces();
+    await instance.flush();
+
+    expect(readWorkspace).toHaveBeenCalledWith(transcriptPath, at);
+    expect(instance.list()[0]).toMatchObject({
+      id: session.id,
+      kind: "zsh",
+      worktreeId: worktree.id,
+      cwd: worktree.path,
+    });
   });
 
   it("keeps root sessions' persisted shape unchanged — no worktreeId key at all", async () => {
