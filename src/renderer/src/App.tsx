@@ -1875,6 +1875,7 @@ export function App() {
           rightSidebarCollapsed,
         },
         appSettings.keybindings,
+        window.multiCliWork.platform,
       ),
     [
       agents,

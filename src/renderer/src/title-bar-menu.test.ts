@@ -57,7 +57,7 @@ function flatten(entries: TitleBarEntry[]): TitleBarEntry[] {
 }
 
 function find(overrides: Partial<TitleBarMenuContext> | undefined, id: string) {
-  const entry = buildTitleBarMenus(context(overrides))
+  const entry = buildTitleBarMenus(context(overrides), {}, "win32")
     .flatMap((menu) => flatten(menu.entries))
     .find((candidate) => candidate.kind !== "separator" && candidate.id === id);
   if (!entry || entry.kind === "separator") throw new Error(`No menu entry with id ${id}`);
@@ -72,7 +72,7 @@ function findItem(menus: ReturnType<typeof buildTitleBarMenus>, menuId: string, 
 
 describe("buildTitleBarMenus", () => {
   it("lays out the six top-level menus in VS Code's order", () => {
-    expect(buildTitleBarMenus(context()).map((menu) => [menu.id, menu.label])).toEqual([
+    expect(buildTitleBarMenus(context(), {}, "win32").map((menu) => [menu.id, menu.label])).toEqual([
       ["file", "파일"],
       ["edit", "편집"],
       ["view", "보기"],
@@ -129,7 +129,7 @@ describe("buildTitleBarMenus", () => {
   });
 
   it("leaves the pane layout to the grid instead of a 세션 menu command", () => {
-    const sessionMenu = buildTitleBarMenus(context()).find((menu) => menu.id === "session")!;
+    const sessionMenu = buildTitleBarMenus(context(), {}, "win32").find((menu) => menu.id === "session")!;
     const ids = flatten(sessionMenu.entries).map((entry) => (entry.kind === "separator" ? null : entry.id));
     expect(ids).not.toContain("session.split");
   });
@@ -162,7 +162,7 @@ describe("buildTitleBarMenus", () => {
   });
 
   it("도움말 오른쪽에 드롭다운 없는 설정 버튼이 선다", () => {
-    const menus = buildTitleBarMenus(settingsButtonContext);
+    const menus = buildTitleBarMenus(settingsButtonContext, {}, "win32");
     const last = menus[menus.length - 1]!;
     expect(last).toMatchObject({ id: "settings", label: "설정", action: "settings.open" });
     expect(last.entries).toEqual([]);
@@ -170,7 +170,11 @@ describe("buildTitleBarMenus", () => {
   });
 
   it("단축키 표기가 키맵 기본값에서 나온다 — 파일 목록 새로고침은 F5를 얻는다", () => {
-    const menus = buildTitleBarMenus({ ...settingsButtonContext, session: { status: "working", tool: false, refreshing: false } });
+    const menus = buildTitleBarMenus(
+      { ...settingsButtonContext, session: { status: "working", tool: false, refreshing: false } },
+      {},
+      "win32",
+    );
     expect(findItem(menus, "view", "view.quick-open")?.shortcut).toBe("Ctrl+P");
     expect(findItem(menus, "file", "file.save")?.shortcut).toBe("Ctrl+S");
     expect(findItem(menus, "view", "view.zoom-in")?.shortcut).toBe("Ctrl+=");
@@ -184,6 +188,7 @@ describe("buildTitleBarMenus", () => {
     const menus = buildTitleBarMenus(
       { ...settingsButtonContext, session: { status: "working", tool: false, refreshing: false } },
       { "view.quick-open": "Ctrl+K", "session.refresh": null },
+      "win32",
     );
     expect(findItem(menus, "view", "view.quick-open")?.shortcut).toBe("Ctrl+K");
     expect(findItem(menus, "session", "session.refresh")?.shortcut).toBeUndefined();

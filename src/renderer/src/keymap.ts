@@ -77,6 +77,7 @@ const SHIFT_GLYPHS: Record<string, string> = { "+": "=", _: "-" };
 
 export function normalizeKeyEvent(
   event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">,
+  platform: NodeJS.Platform,
 ): string | null {
   const key = event.key;
   if (key === "Control" || key === "Shift" || key === "Alt" || key === "Meta") return null;
@@ -84,26 +85,58 @@ export function normalizeKeyEvent(
   let normalized = glyph ?? (key === " " ? "Space" : key);
   if (normalized.length === 1) normalized = normalized.toUpperCase();
   const parts: string[] = [];
-  if (event.ctrlKey || event.metaKey) parts.push("Ctrl");
+  if (platform === "darwin") {
+    // Cmd가 앱 단축키의 수식키다. 실제 Ctrl 조합은 별도 토큰이라 기본 키맵과 충돌하지 않고
+    // 터미널(readline)로 흘러간다.
+    if (event.ctrlKey) parts.push("Ctrl");
+    if (event.metaKey) parts.push("Cmd");
+  } else if (event.ctrlKey || event.metaKey) {
+    parts.push("Ctrl");
+  }
   if (event.altKey) parts.push("Alt");
   if (event.shiftKey && glyph === undefined) parts.push("Shift");
   parts.push(normalized);
   return parts.join("+");
 }
 
-export function effectiveAccelerator(actionId: string, overrides: Record<string, string | null>): string | null {
-  const found = KEYMAP_ACTIONS.find((candidate) => candidate.id === actionId);
-  if (!found) return null;
-  if (found.fixed) return found.defaultAccelerator;
-  const override = overrides[actionId];
-  return override === undefined ? found.defaultAccelerator : override;
+/** darwin 기본값 중 Ctrl→Cmd 일괄 치환을 따르지 않는 것들. 값의 수식키 순서는 normalizeKeyEvent와 같다. */
+const DARWIN_DEFAULT_OVERRIDES: Record<string, string | null> = {
+  "view.full-screen": "Ctrl+Cmd+F", // macOS 전체 화면 관례
+  "view.dev-tools": "Cmd+Alt+I",
+  "session.next": "Ctrl+Tab", // Cmd+Tab은 OS 앱 전환이라 실제 Ctrl을 유지한다
+  "session.prev": "Ctrl+Shift+Tab",
+  "workspace.page-prev": "Ctrl+PageUp", // MacBook에서는 Ctrl+Fn+↑
+  "workspace.page-next": "Ctrl+PageDown",
+  "edit.copy": "Cmd+C",
+  "edit.paste": "Cmd+V",
+  "edit.select-all": "Cmd+A",
+  "edit.find": "Cmd+F",
+};
+
+export function defaultAcceleratorFor(action: KeymapAction, platform: NodeJS.Platform): string | null {
+  if (platform !== "darwin") return action.defaultAccelerator;
+  const override = DARWIN_DEFAULT_OVERRIDES[action.id];
+  if (override !== undefined) return override;
+  return action.defaultAccelerator === null ? null : action.defaultAccelerator.replace(/\bCtrl\b/g, "Cmd");
 }
 
-export function resolveKeymap(overrides: Record<string, string | null>): Map<string, KeymapAction> {
+export function effectiveAccelerator(
+  actionId: string,
+  overrides: Record<string, string | null>,
+  platform: NodeJS.Platform,
+): string | null {
+  const found = KEYMAP_ACTIONS.find((candidate) => candidate.id === actionId);
+  if (!found) return null;
+  if (found.fixed) return defaultAcceleratorFor(found, platform);
+  const override = overrides[actionId];
+  return override === undefined ? defaultAcceleratorFor(found, platform) : override;
+}
+
+export function resolveKeymap(overrides: Record<string, string | null>, platform: NodeJS.Platform): Map<string, KeymapAction> {
   const keymap = new Map<string, KeymapAction>();
   for (const candidate of KEYMAP_ACTIONS) {
     if (candidate.fixed) continue; // edit.*는 TerminalPane 소유 — 디스패처가 잡으면 반쪽 리매핑이 된다
-    const accelerator = effectiveAccelerator(candidate.id, overrides);
+    const accelerator = effectiveAccelerator(candidate.id, overrides, platform);
     if (accelerator) keymap.set(accelerator, candidate);
   }
   return keymap;
@@ -113,20 +146,23 @@ export function findConflict(
   accelerator: string,
   overrides: Record<string, string | null>,
   excludeActionId: string,
+  platform: NodeJS.Platform,
 ): KeymapAction | null {
   for (const candidate of KEYMAP_ACTIONS) {
     if (candidate.id === excludeActionId) continue;
-    if (effectiveAccelerator(candidate.id, overrides) === accelerator) return candidate;
+    if (effectiveAccelerator(candidate.id, overrides, platform) === accelerator) return candidate;
   }
   return null;
 }
 
-export function isBindableAccelerator(accelerator: string): boolean {
+export function isBindableAccelerator(accelerator: string, platform: NodeJS.Platform): boolean {
   const parts = accelerator.split("+");
   const key = parts[parts.length - 1] ?? "";
   const modifiers = new Set(parts.slice(0, -1));
   if (/^F([1-9]|1[0-2])$/.test(key)) return true;
   // Shift만으로는 부족하다 — Shift+문자는 곧 대문자 타이핑이다. Ctrl이나 Alt가 있어야 한다.
+  // darwin은 Cmd가 앱 단축키의 수식키다.
+  if (platform === "darwin" && modifiers.has("Cmd")) return true;
   return modifiers.has("Ctrl") || modifiers.has("Alt");
 }
 

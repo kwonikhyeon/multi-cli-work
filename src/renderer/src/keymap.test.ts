@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   KEYMAP_ACTIONS,
+  defaultAcceleratorFor,
   effectiveAccelerator,
   findConflict,
   isBindableAccelerator,
@@ -20,27 +21,27 @@ describe("normalizeKeyEvent", () => {
   });
 
   it("수식어를 Ctrl→Alt→Shift 순으로 표기하고 meta는 Ctrl로 접는다", () => {
-    expect(normalizeKeyEvent(event("Tab", { ctrlKey: true, shiftKey: true }))).toBe("Ctrl+Shift+Tab");
-    expect(normalizeKeyEvent(event("p", { metaKey: true }))).toBe("Ctrl+P");
-    expect(normalizeKeyEvent(event("k", { ctrlKey: true, altKey: true, shiftKey: true }))).toBe("Ctrl+Alt+Shift+K");
+    expect(normalizeKeyEvent(event("Tab", { ctrlKey: true, shiftKey: true }), "win32")).toBe("Ctrl+Shift+Tab");
+    expect(normalizeKeyEvent(event("p", { metaKey: true }), "win32")).toBe("Ctrl+P");
+    expect(normalizeKeyEvent(event("k", { ctrlKey: true, altKey: true, shiftKey: true }), "win32")).toBe("Ctrl+Alt+Shift+K");
   });
 
   it("Shift 글리프(+, _)는 기본 키로 되돌리고 Shift 표기를 없앤다 — 현행 줌 키와 일치", () => {
-    expect(normalizeKeyEvent(event("+", { ctrlKey: true, shiftKey: true }))).toBe("Ctrl+=");
-    expect(normalizeKeyEvent(event("_", { ctrlKey: true, shiftKey: true }))).toBe("Ctrl+-");
-    expect(normalizeKeyEvent(event("=", { ctrlKey: true }))).toBe("Ctrl+=");
+    expect(normalizeKeyEvent(event("+", { ctrlKey: true, shiftKey: true }), "win32")).toBe("Ctrl+=");
+    expect(normalizeKeyEvent(event("_", { ctrlKey: true, shiftKey: true }), "win32")).toBe("Ctrl+-");
+    expect(normalizeKeyEvent(event("=", { ctrlKey: true }), "win32")).toBe("Ctrl+=");
   });
 
   it("기능키는 단독으로, 수식어 단독은 null", () => {
-    expect(normalizeKeyEvent(event("F5"))).toBe("F5");
-    expect(normalizeKeyEvent(event("F11"))).toBe("F11");
-    expect(normalizeKeyEvent(event("Control", { ctrlKey: true }))).toBeNull();
-    expect(normalizeKeyEvent(event("Shift", { shiftKey: true }))).toBeNull();
+    expect(normalizeKeyEvent(event("F5"), "win32")).toBe("F5");
+    expect(normalizeKeyEvent(event("F11"), "win32")).toBe("F11");
+    expect(normalizeKeyEvent(event("Control", { ctrlKey: true }), "win32")).toBeNull();
+    expect(normalizeKeyEvent(event("Shift", { shiftKey: true }), "win32")).toBeNull();
   });
 
   it("숫자와 쉼표", () => {
-    expect(normalizeKeyEvent(event("1", { ctrlKey: true }))).toBe("Ctrl+1");
-    expect(normalizeKeyEvent(event(",", { ctrlKey: true }))).toBe("Ctrl+,");
+    expect(normalizeKeyEvent(event("1", { ctrlKey: true }), "win32")).toBe("Ctrl+1");
+    expect(normalizeKeyEvent(event(",", { ctrlKey: true }), "win32")).toBe("Ctrl+,");
   });
 });
 
@@ -77,7 +78,7 @@ describe("키맵 카탈로그", () => {
 
 describe("resolveKeymap / effectiveAccelerator / findConflict", () => {
   it("오버라이드가 기본값을 대체하고 null은 해제한다", () => {
-    const keymap = resolveKeymap({ "view.quick-open": "Ctrl+K", "file.refresh": null });
+    const keymap = resolveKeymap({ "view.quick-open": "Ctrl+K", "file.refresh": null }, "win32");
     expect(keymap.get("Ctrl+K")?.id).toBe("view.quick-open");
     expect(keymap.get("Ctrl+P")).toBeUndefined();
     expect(keymap.get("F5")).toBeUndefined();
@@ -85,27 +86,27 @@ describe("resolveKeymap / effectiveAccelerator / findConflict", () => {
   });
 
   it("fixed 액션은 디스패처 키맵에서 빠지고, 유효 키는 항상 기본값이다", () => {
-    expect(resolveKeymap({}).get("Ctrl+V")).toBeUndefined();
-    expect(effectiveAccelerator("edit.paste", { "edit.paste": "Ctrl+B" })).toBe("Ctrl+V");
+    expect(resolveKeymap({}, "win32").get("Ctrl+V")).toBeUndefined();
+    expect(effectiveAccelerator("edit.paste", { "edit.paste": "Ctrl+B" }, "win32")).toBe("Ctrl+V");
   });
 
   it("충돌을 오버라이드 기준으로 찾는다 — fixed 키와의 충돌도 보고한다", () => {
-    expect(findConflict("Ctrl+P", {}, "session.refresh")?.id).toBe("view.quick-open");
-    expect(findConflict("Ctrl+P", { "view.quick-open": "Ctrl+K" }, "session.refresh")).toBeNull();
-    expect(findConflict("Ctrl+V", {}, "view.quick-open")).toMatchObject({ id: "edit.paste", fixed: true });
+    expect(findConflict("Ctrl+P", {}, "session.refresh", "win32")?.id).toBe("view.quick-open");
+    expect(findConflict("Ctrl+P", { "view.quick-open": "Ctrl+K" }, "session.refresh", "win32")).toBeNull();
+    expect(findConflict("Ctrl+V", {}, "view.quick-open", "win32")).toMatchObject({ id: "edit.paste", fixed: true });
   });
 });
 
 describe("isBindableAccelerator", () => {
   it("단독 문자·숫자·Shift+문자는 거부, 기능키 단독과 Ctrl/Alt 조합은 허용", () => {
-    expect(isBindableAccelerator("A")).toBe(false);
-    expect(isBindableAccelerator("1")).toBe(false);
-    expect(isBindableAccelerator("Shift+A")).toBe(false);
-    expect(isBindableAccelerator("F5")).toBe(true);
-    expect(isBindableAccelerator("F12")).toBe(true);
-    expect(isBindableAccelerator("Ctrl+K")).toBe(true);
-    expect(isBindableAccelerator("Alt+1")).toBe(true);
-    expect(isBindableAccelerator("Ctrl+Shift+Tab")).toBe(true);
+    expect(isBindableAccelerator("A", "win32")).toBe(false);
+    expect(isBindableAccelerator("1", "win32")).toBe(false);
+    expect(isBindableAccelerator("Shift+A", "win32")).toBe(false);
+    expect(isBindableAccelerator("F5", "win32")).toBe(true);
+    expect(isBindableAccelerator("F12", "win32")).toBe(true);
+    expect(isBindableAccelerator("Ctrl+K", "win32")).toBe(true);
+    expect(isBindableAccelerator("Alt+1", "win32")).toBe(true);
+    expect(isBindableAccelerator("Ctrl+Shift+Tab", "win32")).toBe(true);
   });
 });
 
@@ -137,5 +138,45 @@ describe("isTypingTarget", () => {
     field.focus();
     expect(isTypingTarget()).toBe(true);
     field.remove();
+  });
+});
+
+describe("darwin keymap", () => {
+  const event = (overrides: Partial<KeyboardEvent>) =>
+    ({ key: "p", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...overrides }) as KeyboardEvent;
+
+  it("Cmd가 Cmd 토큰으로, Ctrl은 Ctrl 토큰으로 구분된다", () => {
+    expect(normalizeKeyEvent(event({ metaKey: true }), "darwin")).toBe("Cmd+P");
+    expect(normalizeKeyEvent(event({ ctrlKey: true }), "darwin")).toBe("Ctrl+P");
+    expect(normalizeKeyEvent(event({ ctrlKey: true, metaKey: true, key: "f" }), "darwin")).toBe("Ctrl+Cmd+F");
+  });
+
+  it("win32에서는 meta도 Ctrl로 합쳐진다 (현행 유지)", () => {
+    expect(normalizeKeyEvent(event({ metaKey: true }), "win32")).toBe("Ctrl+P");
+    expect(normalizeKeyEvent(event({ ctrlKey: true }), "win32")).toBe("Ctrl+P");
+  });
+
+  it("darwin 기본값: Ctrl 계열은 Cmd로, 예외 맵은 그대로", () => {
+    const by = (id: string) => KEYMAP_ACTIONS.find((action) => action.id === id)!;
+    expect(defaultAcceleratorFor(by("view.quick-open"), "darwin")).toBe("Cmd+P");
+    expect(defaultAcceleratorFor(by("workspace.focus-slot-1"), "darwin")).toBe("Cmd+1");
+    expect(defaultAcceleratorFor(by("view.full-screen"), "darwin")).toBe("Ctrl+Cmd+F");
+    expect(defaultAcceleratorFor(by("view.dev-tools"), "darwin")).toBe("Cmd+Alt+I");
+    expect(defaultAcceleratorFor(by("session.next"), "darwin")).toBe("Ctrl+Tab");
+    expect(defaultAcceleratorFor(by("edit.copy"), "darwin")).toBe("Cmd+C");
+    expect(defaultAcceleratorFor(by("view.quick-open"), "win32")).toBe("Ctrl+P");
+  });
+
+  it("resolveKeymap이 darwin 기본값으로 매핑된다", () => {
+    const keymap = resolveKeymap({}, "darwin");
+    expect(keymap.get("Cmd+P")?.id).toBe("view.quick-open");
+    expect(keymap.get("Ctrl+P")).toBeUndefined();
+  });
+
+  it("darwin에서 Cmd 단독도 리바인딩 가능한 수식키다", () => {
+    expect(isBindableAccelerator("Cmd+K", "darwin")).toBe(true);
+    expect(isBindableAccelerator("Cmd+Shift+U", "darwin")).toBe(true);
+    expect(isBindableAccelerator("Cmd+K", "win32")).toBe(false); // win32에서는 Cmd 토큰이 나오지 않는다
+    expect(isBindableAccelerator("Shift+A", "darwin")).toBe(false); // Shift만으로는 여전히 부족
   });
 });

@@ -7,7 +7,8 @@ import { isTypingTarget, normalizeKeyEvent, resolveKeymap } from "../keymap";
  * (`handleMenuActionRef`, `keyActionEnabledRef`)로 묻는다 — 리스너는 한 번만 단다.
  */
 export function useAppShortcuts(keybindings: AppSettings["keybindings"]) {
-  const keymap = useMemo(() => resolveKeymap(keybindings), [keybindings]);
+  const platform = window.multiCliWork.platform;
+  const keymap = useMemo(() => resolveKeymap(keybindings, platform), [keybindings, platform]);
   const keymapRef = useRef(keymap);
   keymapRef.current = keymap;
   const handleMenuActionRef = useRef<(id: string) => void>(() => undefined);
@@ -18,7 +19,7 @@ export function useAppShortcuts(keybindings: AppSettings["keybindings"]) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (document.querySelector("[data-key-capture]")) return; // 단축키 탭이 키를 녹화하는 중
-      const accelerator = normalizeKeyEvent(event);
+      const accelerator = normalizeKeyEvent(event, platform);
       if (!accelerator) return;
       const matched = keymapRef.current.get(accelerator);
       if (!matched) return;

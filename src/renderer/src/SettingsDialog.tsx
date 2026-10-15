@@ -22,6 +22,7 @@ import { ACCENT_COLOR_COUNT, ACCENT_INDEXES, accentClass } from "@shared/accent-
 import {
   KEYMAP_ACTIONS,
   KEYMAP_CATEGORY_ORDER,
+  defaultAcceleratorFor,
   effectiveAccelerator,
   findConflict,
   isBindableAccelerator,
@@ -842,6 +843,7 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
   const [conflict, setConflict] = useState<{ actionId: string; accelerator: string; existing: KeymapAction } | null>(null);
   const [newExtension, setNewExtension] = useState("");
   const [newOpenTarget, setNewOpenTarget] = useState<FileOpenTarget>("os");
+  const platform = window.multiCliWork.platform;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -867,7 +869,7 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
   ): Record<string, string | null> => {
     const catalog = KEYMAP_ACTIONS.find((candidate) => candidate.id === actionId);
     const next = { ...overrides };
-    if (!catalog || accelerator === catalog.defaultAccelerator) delete next[actionId];
+    if (!catalog || accelerator === defaultAcceleratorFor(catalog, platform)) delete next[actionId];
     else next[actionId] = accelerator;
     return next;
   };
@@ -886,13 +888,13 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
         setCaptureNotice(null);
         return;
       }
-      const accelerator = normalizeKeyEvent(event);
+      const accelerator = normalizeKeyEvent(event, platform);
       if (!accelerator) return; // 수식어 단독 — 계속 기다린다
-      if (!isBindableAccelerator(accelerator)) {
+      if (!isBindableAccelerator(accelerator, platform)) {
         setCaptureNotice("수식어 없는 단독 키는 터미널 입력과 충돌합니다 (F1~F12 제외)");
         return; // 계속 캡처
       }
-      const existing = findConflict(accelerator, settings.keybindings, capturingActionId);
+      const existing = findConflict(accelerator, settings.keybindings, capturingActionId, platform);
       if (existing?.fixed) {
         setCaptureNotice(`${accelerator}는 ${existing.label}의 고정 키입니다`);
         return;
@@ -920,7 +922,7 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
         setCaptureNotice(null);
         return;
       }
-      const accelerator = normalizeKeyEvent(event);
+      const accelerator = normalizeKeyEvent(event, platform);
       if (!accelerator) return;
       if (!/(?:^|\+)(?:Ctrl|Alt)\+/.test(accelerator)) {
         setCaptureNotice("전역 단축키에는 Ctrl이나 Alt가 필요합니다");
@@ -1302,7 +1304,7 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
                 <section key={category}>
                   <h3 className="settings-key-category">{category}</h3>
                   {KEYMAP_ACTIONS.filter((candidate) => candidate.category === category).map((candidate) => {
-                    const accelerator = effectiveAccelerator(candidate.id, settings.keybindings);
+                    const accelerator = effectiveAccelerator(candidate.id, settings.keybindings, platform);
                     const capturing = capturingActionId === candidate.id;
                     return (
                       <div className="settings-row settings-key-row" key={candidate.id}>
@@ -1324,7 +1326,7 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
                               <button
                                 type="button"
                                 disabled={settings.keybindings[candidate.id] === undefined}
-                                onClick={() => applyBinding(candidate.id, candidate.defaultAccelerator)}
+                                onClick={() => applyBinding(candidate.id, defaultAcceleratorFor(candidate, platform))}
                               >
                                 기본값으로
                               </button>

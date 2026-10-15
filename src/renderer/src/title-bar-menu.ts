@@ -64,10 +64,11 @@ function item(id: string, label: string, options?: { shortcut?: string; disabled
 export function buildTitleBarMenus(
   context: TitleBarMenuContext,
   keybindings: Record<string, string | null> = {},
+  platform: NodeJS.Platform,
 ): TitleBarMenu[] {
   const { project, session } = context;
   const shortcutFor = (actionId: string): string | undefined =>
-    effectiveAccelerator(actionId, keybindings) ?? undefined;
+    effectiveAccelerator(actionId, keybindings, platform) ?? undefined;
   // Same rules the workspace header uses for its own buttons, so the two never disagree.
   const finished = session?.status === "exited" || session?.status === "error";
   const canLaunch = project !== null && !project.missing && !context.pendingAction;
