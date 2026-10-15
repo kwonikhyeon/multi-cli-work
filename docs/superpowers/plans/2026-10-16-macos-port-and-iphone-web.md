@@ -12,7 +12,8 @@
 
 ## Global Constraints
 
-- Node >= 22.12 (로컬 v25 OK), Electron 43.2.0, 작업 브랜치 `feat/macos-ios-expansion`.
+- Node >= 22.12, Electron 43.2.0, 작업 브랜치 `feat/macos-ios-expansion`.
+- **테스트·실행은 Node 22 LTS로**(`nvm use 22`) — 시스템 Node v25.6은 vitest jsdom과 `globalThis.localStorage` 충돌로 171개 테스트가 실패한다(Task 1 보고서). `npm ci` 뒤 Electron 바이너리가 없으면(`Error: Electron uninstall`) `node node_modules/electron/install.js`를 한 번 실행한다.
 - macOS는 **arm64 전용**, 서명은 **ad-hoc**(`identity: null`), **자동 업데이트는 darwin에서 비활성**(수동 안내로 대체).
 - **Windows/Linux 동작 불변.** 기본값만 플랫폼화하고, 저장된 사용자 keybindings·설정 스키마는 건드리지 않는다.
 - 신규 darwin 분기마다 **유닛 테스트 동반**. 테스트 파일은 대상 파일 옆에 둔다(기존 관례).
