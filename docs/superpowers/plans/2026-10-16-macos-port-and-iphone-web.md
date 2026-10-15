@@ -29,28 +29,28 @@
 
 **Files:** 없음 (환경만)
 
-- [ ] **Step 1: Xcode Command Line Tools 확인/설치**
+- [x] **Step 1: Xcode Command Line Tools 확인/설치**
 
 Run: `xcode-select -p`
 Expected: `/Library/Developer/CommandLineTools` 또는 Xcode 경로 출력. 에러가 나면 `xcode-select --install` 실행 후 설치 완료까지 대기하고 다시 확인.
 
-- [ ] **Step 2: 의존성 설치 + 네이티브 모듈 빌드**
+- [x] **Step 2: 의존성 설치 + 네이티브 모듈 빌드**
 
 Run: `npm ci`
 Expected: 종료 코드 0. postinstall의 `electron-builder install-app-deps`가 node-pty를 Electron 43 ABI로 빌드한다.
 실패 시: `npm run rebuild:native` 실행 후 재확인. 그래도 실패하면 `nvm use 22`(Node 22 LTS)로 전환 후 `npm ci` 재시도.
 
-- [ ] **Step 3: 타입 검사와 유닛 테스트**
+- [x] **Step 3: 타입 검사와 유닛 테스트**
 
 Run: `npm run typecheck && npm test`
 Expected: 모두 통과. (다른 OS 전용 테스트는 platform 인자를 받는 순수 함수 테스트라 macOS에서도 돈다.)
 
-- [ ] **Step 4: dev 모드 첫 기동 수동 확인**
+- [x] **Step 4: dev 모드 첫 기동 수동 확인**
 
 Run: `npm run dev`
 확인: ① 앱 창이 뜬다 ② 폴더를 하나 열고 Bash 세션을 시작한다(아직 zsh 없음 — Task 4 전) ③ `echo hello` 입력·출력 확인 ④ 창을 닫아 종료. 터미널이 안 열리면 Step 2 실패 상태다.
 
-- [ ] **Step 5: 결과 기록**
+- [x] **Step 5: 결과 기록**
 
 이 플랜 파일의 위 체크박스를 채우고 커밋: `git add -A && git commit -m "chore: verify macOS dev environment"`
 
