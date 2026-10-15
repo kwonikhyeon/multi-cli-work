@@ -962,10 +962,22 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
     </div>
   );
 
-  const checkboxRow = (label: string, id: string, checked: boolean, apply: (next: boolean) => AppSettingsPatch) => (
+  const checkboxRow = (
+    label: string,
+    id: string,
+    checked: boolean,
+    apply: (next: boolean) => AppSettingsPatch,
+    disabled = false,
+  ) => (
     <div className="settings-row">
       <label htmlFor={id}>{label}</label>
-      <input id={id} type="checkbox" checked={checked} onChange={(event) => update(apply(event.target.checked))} />
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => update(apply(event.target.checked))}
+      />
     </div>
   );
 
@@ -1023,7 +1035,14 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
                 "settings-auto-updates",
                 settings.general.autoCheckUpdates,
                 (next) => ({ general: { autoCheckUpdates: next } }),
+                platform === "darwin",
               )}
+              {platform === "darwin" ? (
+                <p className="settings-hint">
+                  macOS에서는 자동 업데이트를 지원하지 않아 이 설정이 적용되지 않습니다. 업데이트 확인은 수동으로
+                  진행됩니다.
+                </p>
+              ) : null}
               {checkboxRow(
                 "작업표시줄 아이콘에 세션 진행률 표시",
                 "settings-taskbar-progress",

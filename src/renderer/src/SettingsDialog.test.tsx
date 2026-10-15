@@ -43,6 +43,19 @@ describe("SettingsDialog", () => {
     await waitFor(() => expect(update).toHaveBeenCalledWith({ general: { reduceMotion: true } }));
   });
 
+  it("업데이트 자동 확인 토글은 macOS에서 비활성화되고 win32에서는 그대로 켜져 있다", async () => {
+    window.multiCliWork.platform = "darwin";
+    render(<SettingsDialog settings={DEFAULT_SETTINGS} onClose={() => undefined} />);
+    expect(screen.getByLabelText("시작 시 업데이트 자동 확인")).toBeDisabled();
+    expect(screen.getByText(/macOS에서는 자동 업데이트를 지원하지 않아/)).toBeInTheDocument();
+
+    cleanup();
+    window.multiCliWork.platform = "win32";
+    render(<SettingsDialog settings={DEFAULT_SETTINGS} onClose={() => undefined} />);
+    expect(screen.getByLabelText("시작 시 업데이트 자동 확인")).toBeEnabled();
+    expect(screen.queryByText(/macOS에서는 자동 업데이트를 지원하지 않아/)).not.toBeInTheDocument();
+  });
+
   it("알림 탭에서 방해 금지 시간대를 켜고 시각을 바꾼다", async () => {
     render(<SettingsDialog settings={DEFAULT_SETTINGS} onClose={() => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: "알림" }));
