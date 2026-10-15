@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   KEYMAP_ACTIONS,
+  acceleratorLabel,
   defaultAcceleratorFor,
   effectiveAccelerator,
   findConflict,
@@ -178,5 +179,18 @@ describe("darwin keymap", () => {
     expect(isBindableAccelerator("Cmd+Shift+U", "darwin")).toBe(true);
     expect(isBindableAccelerator("Cmd+K", "win32")).toBe(false); // win32에서는 Cmd 토큰이 나오지 않는다
     expect(isBindableAccelerator("Shift+A", "darwin")).toBe(false); // Shift만으로는 여전히 부족
+  });
+});
+
+describe("acceleratorLabel", () => {
+  it("darwin은 mac 기호 순서(⌃⌥⇧⌘)로 그린다", () => {
+    expect(acceleratorLabel("Cmd+P", "darwin")).toBe("⌘P");
+    expect(acceleratorLabel("Cmd+Shift+U", "darwin")).toBe("⇧⌘U");
+    expect(acceleratorLabel("Ctrl+Cmd+F", "darwin")).toBe("⌃⌘F");
+    expect(acceleratorLabel("Cmd+Alt+I", "darwin")).toBe("⌥⌘I");
+    expect(acceleratorLabel("F5", "darwin")).toBe("F5");
+  });
+  it("다른 플랫폼은 그대로 둔다", () => {
+    expect(acceleratorLabel("Ctrl+P", "win32")).toBe("Ctrl+P");
   });
 });

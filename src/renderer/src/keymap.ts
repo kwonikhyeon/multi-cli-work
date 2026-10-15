@@ -155,6 +155,24 @@ export function findConflict(
   return null;
 }
 
+/** 표시 전용. 저장 포맷은 토큰 문자열 그대로이고, darwin에서만 기호로 바꿔 그린다. */
+const MAC_SYMBOL_ORDER: ReadonlyArray<[token: string, symbol: string]> = [
+  ["Ctrl", "⌃"],
+  ["Alt", "⌥"],
+  ["Shift", "⇧"],
+  ["Cmd", "⌘"],
+];
+
+export function acceleratorLabel(accelerator: string, platform: NodeJS.Platform): string {
+  if (platform !== "darwin") return accelerator;
+  const parts = accelerator.split("+");
+  const key = parts.pop() ?? "";
+  const symbols = MAC_SYMBOL_ORDER.filter(([token]) => parts.includes(token))
+    .map(([, symbol]) => symbol)
+    .join("");
+  return `${symbols}${key}`;
+}
+
 export function isBindableAccelerator(accelerator: string, platform: NodeJS.Platform): boolean {
   const parts = accelerator.split("+");
   const key = parts[parts.length - 1] ?? "";

@@ -1,7 +1,7 @@
 import type { AgentView } from "@shared/agent-types";
 import type { TerminalStatus, ToolCommand } from "@shared/terminal-types";
 import { TOOL_AGENT_ID, findAgent, toolDetails } from "./session-labels";
-import { effectiveAccelerator } from "./keymap";
+import { acceleratorLabel, effectiveAccelerator } from "./keymap";
 
 /**
  * The title bar's menus as plain data. Keeping the enablement rules out of the component is what
@@ -67,8 +67,10 @@ export function buildTitleBarMenus(
   platform: NodeJS.Platform,
 ): TitleBarMenu[] {
   const { project, session } = context;
-  const shortcutFor = (actionId: string): string | undefined =>
-    effectiveAccelerator(actionId, keybindings, platform) ?? undefined;
+  const shortcutFor = (actionId: string): string | undefined => {
+    const accelerator = effectiveAccelerator(actionId, keybindings, platform);
+    return accelerator ? acceleratorLabel(accelerator, platform) : undefined;
+  };
   // Same rules the workspace header uses for its own buttons, so the two never disagree.
   const finished = session?.status === "exited" || session?.status === "error";
   const canLaunch = project !== null && !project.missing && !context.pendingAction;

@@ -193,4 +193,14 @@ describe("buildTitleBarMenus", () => {
     expect(findItem(menus, "view", "view.quick-open")?.shortcut).toBe("Ctrl+K");
     expect(findItem(menus, "session", "session.refresh")?.shortcut).toBeUndefined();
   });
+
+  it("darwin에서는 메뉴 단축키 표기가 mac 기호로 바뀐다 — 전체 화면은 ⌃⌘F, 찾기는 ⌘F를 얻는다", () => {
+    const menus = buildTitleBarMenus(
+      { ...settingsButtonContext, terminalFocused: true, session: { status: "working", tool: false, refreshing: false } },
+      {},
+      "darwin",
+    );
+    expect(findItem(menus, "view", "view.full-screen")?.shortcut).toBe("⌃⌘F");
+    expect(findItem(menus, "edit", "edit.find")?.shortcut).toBe("⌘F");
+  });
 });

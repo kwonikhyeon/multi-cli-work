@@ -22,6 +22,7 @@ import { ACCENT_COLOR_COUNT, ACCENT_INDEXES, accentClass } from "@shared/accent-
 import {
   KEYMAP_ACTIONS,
   KEYMAP_CATEGORY_ORDER,
+  acceleratorLabel,
   defaultAcceleratorFor,
   effectiveAccelerator,
   findConflict,
@@ -896,7 +897,7 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
       }
       const existing = findConflict(accelerator, settings.keybindings, capturingActionId, platform);
       if (existing?.fixed) {
-        setCaptureNotice(`${accelerator}는 ${existing.label}의 고정 키입니다`);
+        setCaptureNotice(`${acceleratorLabel(accelerator, platform)}는 ${existing.label}의 고정 키입니다`);
         return;
       }
       setCapturingActionId(null);
@@ -1033,7 +1034,11 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
                 <span>창 불러오기 단축키</span>
                 <span className="settings-key-controls">
                   <span className="settings-key" aria-label="창 불러오기 단축키 값">
-                    {capturingSummon ? "키를 누르세요…" : (settings.general.summonShortcut ?? "없음")}
+                    {capturingSummon
+                      ? "키를 누르세요…"
+                      : settings.general.summonShortcut
+                        ? acceleratorLabel(settings.general.summonShortcut, platform)
+                        : "없음"}
                   </span>
                   <button type="button" onClick={() => setCapturingSummon(true)} disabled={capturingSummon}>
                     키 지정
@@ -1314,7 +1319,7 @@ export function SettingsDialog({ settings, onClose, initialTab }: SettingsDialog
                             className={`settings-key ${capturing ? "capturing" : ""}`}
                             {...(capturing ? { "data-key-capture": "true" } : {})}
                           >
-                            {capturing ? "키를 누르세요…" : accelerator ?? "없음"}
+                            {capturing ? "키를 누르세요…" : accelerator ? acceleratorLabel(accelerator, platform) : "없음"}
                           </span>
                           {candidate.fixed ? (
                             <span className="settings-key-fixed">고정</span>
