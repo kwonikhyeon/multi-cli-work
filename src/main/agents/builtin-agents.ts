@@ -48,6 +48,21 @@ export const BUILTIN_AGENTS: Record<BuiltinAgentId, AgentDefinition> = {
     accentColor: "#4eaa25",
     builtin: true,
   },
+  zsh: {
+    id: "zsh",
+    label: "zsh",
+    commands: ["zsh"],
+    args: ["--login"],
+    newSessionArgs: [],
+    resumeArgs: [],
+    conversationId: "none",
+    statusAdapter: "signals",
+    titleSource: "none",
+    shiftEnter: "enter",
+    icon: null,
+    accentColor: "#4eaa25",
+    builtin: true,
+  },
   claude: {
     id: "claude",
     label: "Claude Code",
@@ -87,6 +102,10 @@ export const BUILTIN_AGENTS: Record<BuiltinAgentId, AgentDefinition> = {
 };
 
 export function builtinAgents(platform: NodeJS.Platform = process.platform): AgentDefinition[] {
+  // macOS의 기본 로그인 셸은 zsh다. bash(3.2)도 있으므로 함께 노출한다.
+  if (platform === "darwin") {
+    return [BUILTIN_AGENTS.zsh, BUILTIN_AGENTS.bash, BUILTIN_AGENTS.claude, BUILTIN_AGENTS.codex];
+  }
   const shellId: BuiltinAgentId = platform === "win32" ? "powershell" : "bash";
   return [BUILTIN_AGENTS[shellId], BUILTIN_AGENTS.claude, BUILTIN_AGENTS.codex];
 }

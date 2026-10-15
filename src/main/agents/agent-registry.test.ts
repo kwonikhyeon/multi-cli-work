@@ -54,6 +54,11 @@ describe("agent registry", () => {
     expect(windows.agents.map((agent) => agent.id)).toEqual(["powershell", "claude", "codex"]);
   });
 
+  it("darwin exposes zsh as the OS shell, with bash beside it", async () => {
+    const snapshot = await readAgentRegistry({ registryPath: await tempRegistryPath(), platform: "darwin" });
+    expect(snapshot.agents.map((agent) => agent.id)).toEqual(["zsh", "bash", "claude", "codex"]);
+  });
+
   it("appends a user agent to the built-ins with signal-based defaults", async () => {
     const registryPath = await tempRegistryPath();
     await writeRegistry(registryPath, { gemini: GEMINI });
