@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, nativeImage, Tray, dialog } from "electron";
 import path from "node:path";
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime";
-import { trayIconDataUrl } from "./tray-icon";
+import { trayIconDataUrl, trayTemplateBitmap } from "./tray-icon";
 import { checkForUpdates, initUpdater, quitAndInstall } from "./updater";
 import { APP_WINDOW_TITLE, applyWindowAttention } from "./window-attention";
 import { dockBadgeText, taskbarBadgeSpec, trayTooltip } from "./window-badge";
@@ -199,8 +199,15 @@ async function snoozeNotifications(durationMs: number): Promise<void> {
 }
 
 function createTray(): Tray {
-  const icon = nativeImage.createFromDataURL(trayIconDataUrl(16));
-  icon.addRepresentation({ scaleFactor: 2, dataURL: trayIconDataUrl(32) });
+  let icon: Electron.NativeImage;
+  if (process.platform === "darwin") {
+    icon = nativeImage.createFromBitmap(trayTemplateBitmap(16), { width: 16, height: 16 });
+    icon.addRepresentation({ scaleFactor: 2, buffer: trayTemplateBitmap(32), width: 32, height: 32 });
+    icon.setTemplateImage(true);
+  } else {
+    icon = nativeImage.createFromDataURL(trayIconDataUrl(16));
+    icon.addRepresentation({ scaleFactor: 2, dataURL: trayIconDataUrl(32) });
+  }
   if (icon.isEmpty()) {
     console.error("Tray icon failed to decode; the tray icon will be invisible.");
   }
