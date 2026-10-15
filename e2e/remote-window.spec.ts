@@ -11,6 +11,7 @@ const execFileAsync = promisify(execFile);
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const NOW = "2026-07-11T12:00:00.000Z";
 const WINDOWS = process.platform === "win32";
+const MAC = process.platform === "darwin";
 const SHELL_ID = WINDOWS ? "powershell" : "bash";
 const SHELL_LABEL = WINDOWS ? "PowerShell" : "Bash";
 const echo = (text: string) => (WINDOWS ? `Write-Output ${text}` : `echo ${text}`);
@@ -220,20 +221,25 @@ test.describe.serial("Remote PC window", () => {
     await remote.getByRole("button", { name: "다시 맞추기" }).click();
     await expect(remoteSizeNotice).toBeVisible();
 
-    // 붙여넣기: 이 PC의 클립보드가 브라우저 paste 이벤트로 xterm에 들어간다.
+    // 붙여넣기: 이 PC의 클립보드가 브라우저 paste 이벤트로 xterm에 들어간다. macOS의 붙여넣기 키는
+    // Cmd+V뿐이다 — Ctrl+V는 clipboardKeyAction이 Apple 플랫폼에서 손대지 않고 그대로 PTY의
+    // quoted-insert로 보낸다(terminal-input.ts).
     await app.evaluate(({ clipboard }, text) => clipboard.writeText(text), echo("MCW_PASTED"));
     await remote.locator(".m-terminal").click();
-    await remote.keyboard.press("Control+V");
+    await remote.keyboard.press(MAC ? "Meta+V" : "Control+V");
     await remote.keyboard.press("Enter");
     await expect(remoteRows).toContainText("MCW_PASTED");
 
-    // 복사: 출력 줄의 낱말을 두 번 눌러 고르고 Ctrl+Shift+C. 줄 한가운데는 빈칸이라 글자가 있는 왼쪽을 누른다.
+    // 복사: 출력 줄의 낱말을 두 번 눌러 고르고 복사 키를 누른다. Windows·Linux는 선택이 없어도 강제
+    // 복사가 되는 Ctrl+Shift+C가 있지만, macOS의 복사 액셀러레이터는 Cmd+C 하나뿐이다(Cmd+Shift+C는
+    // 네이티브 copy 이벤트를 띄우지 않는다) — 여기서는 이미 선택돼 있으니 Cmd+C로 충분하다. 줄
+    // 한가운데는 빈칸이라 글자가 있는 왼쪽을 누른다.
     await app.evaluate(({ clipboard }) => clipboard.writeText(""));
     // xterm의 화면 레이어가 줄 요소를 덮고 있어서 요소가 아니라 좌표로 누른다.
     const pastedRow = await remoteRows.locator("> div").filter({ hasText: /^MCW_PASTED$/ }).last().boundingBox();
     if (!pastedRow) throw new Error("pasted output row is not on screen");
     await remote.mouse.dblclick(pastedRow.x + 20, pastedRow.y + pastedRow.height / 2);
-    await remote.keyboard.press("Control+Shift+C");
+    await remote.keyboard.press(MAC ? "Meta+C" : "Control+Shift+C");
     await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toContain("MCW_PASTED");
 
     // 세션 관리: 원격 창에서 새 세션을 띄우고 중지·재시작·삭제한다. 호스트 화면의 선택은 그대로다.

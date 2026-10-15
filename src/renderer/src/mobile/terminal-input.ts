@@ -62,13 +62,32 @@ export function createReplayGate(write: (data: string) => void) {
 export type ClipboardKeyAction = "copy" | "paste" | "swallow" | null;
 
 /**
+ * 이 모바일 번들은 iPhone·iPad Safari, Mac 브라우저, Electron 원격 창 모두에서 돌고 `window.multiCliWork`가
+ * 없다(그 프리로드 셸 브리지는 원격 창에만 있다) — 그래서 TerminalPane처럼 `platform === "darwin"`을 못 쓰고
+ * `navigator.platform`을 호출부(SessionScreen)에서 읽어 순수 함수로 넘긴다. iPadOS 13+는 "데스크톱 사이트
+ * 요청"이 꺼져 있어도 `navigator.platform`이 "MacIntel"로 나오는데, 거기도 하드웨어 키보드의 복사·붙여넣기는
+ * Cmd 하나뿐이라 Mac과 같이 취급하는 것이 맞는 동작이다.
+ */
+export function isApplePlatform(platform: string): boolean {
+  return platform.startsWith("Mac") || platform === "iPhone" || platform === "iPad" || platform === "iPod";
+}
+
+/**
  * 데스크톱 TerminalPane과 같은 키 규칙. Ctrl+C는 선택이 있을 때만 복사이고(없으면 인터럽트로 PTY에
  * 간다), Ctrl+Shift+C는 복사할 것이 없어도 복사 키로 먹는다. Ctrl+V·Ctrl+Shift+V는 붙여넣기다.
+ *
+ * macOS·iPadOS·iOS(Apple 플랫폼)에서는 이 Ctrl 분기를 전부 건너뛴다 — TerminalPane.tsx:224-226과 같은
+ * 이유다. 복사·붙여넣기는 Cmd+C/Cmd+V뿐이고(그 키는 바로 아래 metaKey 분기에서 이미 null을 돌려준다),
+ * Ctrl+C는 인터럽트·Ctrl+V는 quoted-insert로 그대로 PTY에 가야 한다. `isApple`은 기본값을 두지 않은
+ * 필수 인자다 — 기본값 `false`는 "분기를 잊으면 Windows·Linux처럼 동작"하게 만들어 이번과 같은 버그를
+ * 그대로 재현한다.
  */
 export function clipboardKeyAction(
   event: Pick<KeyboardEvent, "ctrlKey" | "altKey" | "shiftKey" | "metaKey" | "code" | "key">,
   hasSelection: boolean,
+  isApple: boolean,
 ): ClipboardKeyAction {
+  if (isApple) return null;
   if (!event.ctrlKey || event.altKey || event.metaKey) return null;
   const key = event.code || event.key;
   if (key === "KeyV") return "paste";

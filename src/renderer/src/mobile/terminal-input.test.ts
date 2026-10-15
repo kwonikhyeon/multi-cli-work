@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clipboardKeyAction, createReplayGate, encodeComposerInput, QUICK_KEYS } from "./terminal-input";
+import { clipboardKeyAction, createReplayGate, encodeComposerInput, isApplePlatform, QUICK_KEYS } from "./terminal-input";
 
 describe("encodeComposerInput", () => {
   it("sends a single line followed by Enter", () => {
@@ -58,6 +58,26 @@ describe("createReplayGate", () => {
   });
 });
 
+describe("isApplePlatform", () => {
+  it("takes every Mac navigator.platform string", () => {
+    expect(isApplePlatform("MacIntel")).toBe(true);
+    expect(isApplePlatform("MacPPC")).toBe(true);
+  });
+
+  it("takes iPhone/iPad/iPod, including iPadOS 13+'s MacIntel disguise", () => {
+    expect(isApplePlatform("iPhone")).toBe(true);
+    expect(isApplePlatform("iPad")).toBe(true);
+    expect(isApplePlatform("iPod")).toBe(true);
+    // iPadOS 13+는 "데스크톱 사이트 요청"과 무관하게 MacIntel로 나오지만, 위 MacIntel 케이스와 같은
+    // 경로로 이미 true다 — 하드웨어 키보드의 복사·붙여넣기가 Cmd 하나뿐인 것도 Mac과 같다.
+  });
+
+  it("leaves Windows and Linux alone", () => {
+    expect(isApplePlatform("Win32")).toBe(false);
+    expect(isApplePlatform("Linux x86_64")).toBe(false);
+  });
+});
+
 describe("clipboardKeyAction", () => {
   const key = (code: string, modifiers: Partial<{ ctrlKey: boolean; shiftKey: boolean; altKey: boolean; metaKey: boolean }> = {}) => ({
     code,
@@ -70,25 +90,35 @@ describe("clipboardKeyAction", () => {
   });
 
   it("copies with Ctrl+C only when something is selected", () => {
-    expect(clipboardKeyAction(key("KeyC", { ctrlKey: true }), true)).toBe("copy");
+    expect(clipboardKeyAction(key("KeyC", { ctrlKey: true }), true, false)).toBe("copy");
     // 선택이 없으면 Ctrl+C는 인터럽트로 PTY에 간다.
-    expect(clipboardKeyAction(key("KeyC", { ctrlKey: true }), false)).toBeNull();
+    expect(clipboardKeyAction(key("KeyC", { ctrlKey: true }), false, false)).toBeNull();
   });
 
   it("always takes Ctrl+Shift+C as the copy key", () => {
-    expect(clipboardKeyAction(key("KeyC", { ctrlKey: true, shiftKey: true }), true)).toBe("copy");
-    expect(clipboardKeyAction(key("KeyC", { ctrlKey: true, shiftKey: true }), false)).toBe("swallow");
+    expect(clipboardKeyAction(key("KeyC", { ctrlKey: true, shiftKey: true }), true, false)).toBe("copy");
+    expect(clipboardKeyAction(key("KeyC", { ctrlKey: true, shiftKey: true }), false, false)).toBe("swallow");
   });
 
   it("pastes with Ctrl+V and Ctrl+Shift+V", () => {
-    expect(clipboardKeyAction(key("KeyV", { ctrlKey: true }), false)).toBe("paste");
-    expect(clipboardKeyAction(key("KeyV", { ctrlKey: true, shiftKey: true }), true)).toBe("paste");
+    expect(clipboardKeyAction(key("KeyV", { ctrlKey: true }), false, false)).toBe("paste");
+    expect(clipboardKeyAction(key("KeyV", { ctrlKey: true, shiftKey: true }), true, false)).toBe("paste");
   });
 
   it("leaves every other key to the terminal", () => {
-    expect(clipboardKeyAction(key("KeyC"), true)).toBeNull();
-    expect(clipboardKeyAction(key("KeyV", { ctrlKey: true, altKey: true }), false)).toBeNull();
-    expect(clipboardKeyAction(key("KeyC", { ctrlKey: true, metaKey: true }), true)).toBeNull();
-    expect(clipboardKeyAction(key("KeyX", { ctrlKey: true }), true)).toBeNull();
+    expect(clipboardKeyAction(key("KeyC"), true, false)).toBeNull();
+    expect(clipboardKeyAction(key("KeyV", { ctrlKey: true, altKey: true }), false, false)).toBeNull();
+    expect(clipboardKeyAction(key("KeyC", { ctrlKey: true, metaKey: true }), true, false)).toBeNull();
+    expect(clipboardKeyAction(key("KeyX", { ctrlKey: true }), true, false)).toBeNull();
+  });
+
+  it("on Apple platforms, every Ctrl combination is left to the terminal — only Cmd is the clipboard key", () => {
+    // Cmd+C/Cmd+V는 isApple과 무관하게 metaKey 분기에서 이미 null이다(그 키는 손대지 않는다).
+    // 여기서 확인하는 것은 isApple이 Ctrl 쪽을 전부 꺼서, 선택이 있어도 Ctrl+C가 복사로 먹히지
+    // 않고 그대로 인터럽트로(렌더러 쪽에서 null → true → PTY) 흘러가는 것이다.
+    expect(clipboardKeyAction(key("KeyC", { ctrlKey: true }), true, true)).toBeNull();
+    expect(clipboardKeyAction(key("KeyC", { ctrlKey: true, shiftKey: true }), true, true)).toBeNull();
+    expect(clipboardKeyAction(key("KeyV", { ctrlKey: true }), false, true)).toBeNull();
+    expect(clipboardKeyAction(key("KeyV", { ctrlKey: true, shiftKey: true }), true, true)).toBeNull();
   });
 });

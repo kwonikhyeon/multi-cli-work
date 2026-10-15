@@ -7,7 +7,7 @@ import { createAutoFit, type AutoFit, type AutoFitState } from "./auto-fit";
 import { TERMINAL_FONT_INDEX, TERMINAL_FONT_SIZES, type TerminalSize } from "./initial-size";
 import type { RemoteClient } from "./remote-client";
 import { STATUS_LABEL } from "./SessionList";
-import { clipboardKeyAction, createReplayGate, encodeComposerInput, QUICK_KEYS } from "./terminal-input";
+import { clipboardKeyAction, createReplayGate, encodeComposerInput, isApplePlatform, QUICK_KEYS } from "./terminal-input";
 import { planTouchScroll } from "./touch-scroll";
 
 interface SessionScreenProps {
@@ -82,8 +82,11 @@ export function SessionScreen({ client, session, deviceId, onBack, wide = false,
 
     // 키보드로 쓰는 넓은 화면에서만 복사·붙여넣기 키를 가로챈다. 폰 화면의 키 처리는 전과 같다.
     if (wide) {
+      // navigator.platform은 iPhone·iPad Safari, Mac 브라우저, 이 Electron 원격 창 모두에서 읽을 수 있다
+      // (window.multiCliWork는 원격 창에만 있다) — Apple 플랫폼이면 Ctrl 조합 가로채기를 전부 끈다.
+      const isApple = isApplePlatform(navigator.platform);
       terminal.attachCustomKeyEventHandler((event) => {
-        const action = clipboardKeyAction(event, terminal.hasSelection());
+        const action = clipboardKeyAction(event, terminal.hasSelection(), isApple);
         if (action === null) return true;
         // 붙여넣기는 xterm이 키를 먹지 않게만 한다 — 브라우저의 paste 이벤트가 xterm에 닿아 처리된다.
         if (action === "paste") return false;
