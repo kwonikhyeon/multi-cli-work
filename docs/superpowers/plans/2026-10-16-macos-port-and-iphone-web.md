@@ -489,9 +489,25 @@ const shortcutFor = (actionId: string): string | undefined => {
 };
 ```
 
-`SettingsDialog.tsx` 단축키 탭에서 지금 단축키/기본값 문자열을 그리는 자리(1301행 근처 목록 행)도 `acceleratorLabel(<문자열>, platform)`로 감싼다. **입력 캡처 저장 값은 그대로** 토큰 문자열이다(라벨만 변환).
+`SettingsDialog.tsx`에서 토큰 문자열을 **화면에 그리는 자리는 세 곳**이다. 전부 `acceleratorLabel(<문자열>, platform)`을 거치게 한다. **입력 캡처가 저장하는 값은 그대로** 토큰 문자열이다(라벨만 변환) — `platform`은 Task 5에서 이미 이 컴포넌트 상단에 있다.
 
-같은 파일 897행 근처의 충돌 안내도 토큰을 그대로 노출한다 — 표기를 일관되게 맞춘다(`platform`은 Task 5에서 이미 이 컴포넌트 상단에 있다):
+① 단축키 목록 행(1316행 근처). `accelerator`는 `effectiveAccelerator(...)`의 반환값이다:
+
+```tsx
+                            {capturing ? "키를 누르세요…" : accelerator ? acceleratorLabel(accelerator, platform) : "없음"}
+```
+
+② 전역 summon 키 표시(1036행 근처). 저장값이 `Ctrl+Alt+K`여도 darwin에서는 `⌃⌥K`로 보여야 ①과 표기가 어긋나지 않는다:
+
+```tsx
+                    {capturingSummon
+                      ? "키를 누르세요…"
+                      : settings.general.summonShortcut
+                        ? acceleratorLabel(settings.general.summonShortcut, platform)
+                        : "없음"}
+```
+
+③ 충돌 안내(897행 근처)도 토큰을 그대로 노출한다:
 
 ```tsx
         setCaptureNotice(`${acceleratorLabel(accelerator, platform)}는 ${existing.label}의 고정 키입니다`);
