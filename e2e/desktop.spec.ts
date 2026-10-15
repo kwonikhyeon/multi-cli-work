@@ -10,6 +10,7 @@ const execFileAsync = promisify(execFile);
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const NOW = "2026-07-11T12:00:00.000Z";
 const WINDOWS = process.platform === "win32";
+const MAC = process.platform === "darwin";
 const SHELL_ID = WINDOWS ? "powershell" : "bash";
 const SHELL_LABEL = WINDOWS ? "PowerShell" : "Bash";
 const shellCommand = (windows: string, linux: string) => (WINDOWS ? windows : linux);
@@ -720,7 +721,12 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
    * what they used to offer. It has to be there, sit flush at the top, and actually drive the app.
    */
   test("@smoke drives the app from its own title bar instead of the native menu", async () => {
-    expect(await app.evaluate(({ Menu }) => Menu.getApplicationMenu() === null)).toBe(true);
+    if (MAC) {
+      // Task 9: macOS는 Cmd+Q/C/V와 받아쓰기를 살리려고 role 전용 메뉴만 둔다 — 앱을 구동하는 메뉴가 아니다.
+      expect(await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.length ?? 0)).toBe(3);
+    } else {
+      expect(await app.evaluate(({ Menu }) => Menu.getApplicationMenu() === null)).toBe(true);
+    }
 
     const titleBar = page.locator(".title-bar");
     const geometry = await titleBar.evaluate((element) => {
@@ -731,8 +737,13 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
     for (const label of ["파일", "편집", "보기", "세션", "도구", "도움말"]) {
       await expect(titleBar.getByRole("menuitem", { name: label })).toBeVisible();
     }
-    for (const label of ["최소화", "최대화", "닫기"]) {
-      await expect(titleBar.getByRole("button", { name: label })).toBeVisible();
+    if (MAC) {
+      // hiddenInset 창의 네이티브 신호등이 그 자리를 대신한다(Task 2·3).
+      await expect(titleBar.locator(".window-controls")).toHaveCount(0);
+    } else {
+      for (const label of ["최소화", "최대화", "닫기"]) {
+        await expect(titleBar.getByRole("button", { name: label })).toBeVisible();
+      }
     }
 
     // Folding the sidebar is the least invasive item that proves a menu click reaches the app.
@@ -814,7 +825,8 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
   test("jumps between sessions with the quick open palette", async () => {
     // Focus sits inside the Echo Agent terminal from the previous test — the palette shortcut
     // must win over the terminal, which is the whole point of the capture-phase listener.
-    await page.keyboard.press("Control+p");
+    // view.quick-open은 DARWIN_DEFAULT_OVERRIDES 예외가 아니라 darwin에서 Cmd+P로 치환된다.
+    await page.keyboard.press(MAC ? "Meta+p" : "Control+p");
     const palette = page.getByRole("dialog", { name: "빠른 열기" });
     await expect(palette).toBeVisible();
 
@@ -825,7 +837,7 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
     await expect(page.getByRole("region", { name: `${SHELL_ID} 터미널` })).toBeVisible();
     await expect(page.locator(".grid-pane.pane-focused")).toHaveAttribute("aria-label", SHELL_LABEL);
 
-    await page.keyboard.press("Control+p");
+    await page.keyboard.press(MAC ? "Meta+p" : "Control+p");
     await expect(palette).toBeVisible();
     await attachScreenshot("quick-open");
     await page.keyboard.press("Escape");
@@ -1081,7 +1093,8 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
     // Zoom fills the grid with the focused pane; the other stays mounted (its terminal attached) out
     // of sight, the zoom follows Ctrl+Tab, and a direction key lets go of it and moves next door.
     const grid = page.locator(".workspace-grid");
-    await page.keyboard.press("Control+Shift+Enter");
+    // view.zoom-pane은 DARWIN_DEFAULT_OVERRIDES 예외 목록에 없어 darwin에서 Cmd로 치환된다(keymap.ts).
+    await page.keyboard.press(MAC ? "Meta+Shift+Enter" : "Control+Shift+Enter");
     await expect(grid).toHaveAttribute("data-zoomed", "true");
     await expect(pane(SHELL_LABEL)).toBeHidden();
     await expect(page.locator(".workspace-grid .xterm")).toHaveCount(2);
@@ -1090,7 +1103,9 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
     await expect(pane("Echo Agent")).toBeHidden();
     const shellSlot = Number(await pane(SHELL_LABEL).getAttribute("data-slot"));
     const echoSlot = Number(await pane("Echo Agent").getAttribute("data-slot"));
-    await page.keyboard.press(echoSlot < shellSlot ? "Control+Alt+ArrowLeft" : "Control+Alt+ArrowRight");
+    // workspace.focus-left/right도 같은 이유로 darwin에서는 Cmd+Alt+Arrow*다.
+    const focusNeighbor = echoSlot < shellSlot ? "ArrowLeft" : "ArrowRight";
+    await page.keyboard.press(MAC ? `Meta+Alt+${focusNeighbor}` : `Control+Alt+${focusNeighbor}`);
     await expect(grid).not.toHaveAttribute("data-zoomed", "true");
     await expect(page.locator(".grid-pane.pane-focused")).toHaveAttribute("aria-label", "Echo Agent");
     await expect(pane(SHELL_LABEL).locator(".xterm-rows")).toContainText("MCW_PANE_SHELL");
@@ -1491,7 +1506,8 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
     // The command line itself echoes the needle, so count rendered rows rather than any match.
     await expect(terminal.locator(".xterm-rows > div").filter({ hasText: /^NDL_ONE\s*$/ })).toHaveCount(0);
 
-    await page.keyboard.press("Control+f");
+    // edit.find는 TerminalPane이 직접 처리한다(fixed) — darwin에서는 Cmd+F만 찾기를 열고 Ctrl+F는 PTY로 흘러간다.
+    await page.keyboard.press(MAC ? "Meta+f" : "Control+f");
     const search = page.getByRole("search", { name: "터미널에서 찾기" });
     await expect(search).toBeVisible();
     await search.getByRole("textbox", { name: "찾을 텍스트" }).fill("NDL_ONE");
@@ -1663,7 +1679,8 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
     }, work);
 
-    await page.keyboard.press("Control+,");
+    // settings.open도 override 예외가 아니라 darwin에서 Cmd+,로 치환된다.
+    await page.keyboard.press(MAC ? "Meta+," : "Control+,");
     const settings = page.getByRole("dialog", { name: "설정" });
     await settings.locator("nav").getByText("워크스페이스", { exact: true }).click();
     await settings.getByRole("button", { name: "루트 추가" }).click();

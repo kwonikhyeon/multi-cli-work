@@ -28,7 +28,7 @@ test("session activity stays distinct from focus, progress and reduced motion", 
     folderViews: { [projectId]: view }, workspace: view,
     sessions: Object.fromEntries(ids.map((id, index) => [id, {
       id, projectId, tool: null, title: null, name: `Session ${index + 1}`,
-      kind: process.platform === "win32" ? "powershell" : "bash",
+      kind: process.platform === "win32" ? "powershell" : process.platform === "darwin" ? "zsh" : "bash",
       cwd: root, providerConversationId: null, interruptedByShutdown: false, createdAt: now, updatedAt: now,
     }])),
   }));
