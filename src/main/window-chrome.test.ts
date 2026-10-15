@@ -8,8 +8,11 @@ describe("windowChromeOptions", () => {
     expect(windowChromeOptions("win32")).toEqual({ titleBarStyle: "hidden" });
   });
 
-  it("drops the frame everywhere else, because titleBarStyle is a no-op there", () => {
+  it("drops the frame on Linux, because titleBarStyle is a no-op there", () => {
     expect(windowChromeOptions("linux")).toEqual({ frame: false });
-    expect(windowChromeOptions("darwin")).toEqual({ frame: false });
+  });
+
+  it("keeps the traffic lights on macOS by hiding only the title bar", () => {
+    expect(windowChromeOptions("darwin")).toEqual({ titleBarStyle: "hiddenInset" });
   });
 });
