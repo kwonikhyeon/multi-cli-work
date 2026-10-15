@@ -321,6 +321,9 @@ button:focus-visible {
   user-select: none;
 }
 
+/* macOS: hiddenInset 신호등(좌측 약 70px)을 피해 메뉴를 민다. 창 버튼은 OS 것을 쓴다. */
+.title-bar-mac { padding-left: 76px; }
+
 .title-bar-menus {
   display: flex;
   height: 100%;

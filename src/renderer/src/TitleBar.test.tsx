@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TitleBar } from "./TitleBar";
 import type { TitleBarMenu } from "./title-bar-menu";
 
-function createWindowApi(initial: WindowChromeState = { maximized: false, fullScreen: false }) {
+function createWindowApi({
+  initial = { maximized: false, fullScreen: false },
+  platform = "win32",
+}: { initial?: WindowChromeState; platform?: NodeJS.Platform } = {}) {
   const listeners = new Set<(state: WindowChromeState) => void>();
   const windowApi: MultiCliWorkApi["window"] = {
     minimize: vi.fn().mockResolvedValue(undefined),
@@ -21,7 +24,7 @@ function createWindowApi(initial: WindowChromeState = { maximized: false, fullSc
       return () => listeners.delete(listener);
     }),
   };
-  window.multiCliWork = { window: windowApi } as unknown as MultiCliWorkApi;
+  window.multiCliWork = { window: windowApi, platform } as unknown as MultiCliWorkApi;
   return {
     windowApi,
     emit(state: WindowChromeState) {
@@ -182,5 +185,14 @@ describe("title bar", () => {
     harness.emit({ maximized: true, fullScreen: false });
 
     expect(screen.getByRole("button", { name: "이전 크기로 복원" })).toBeInTheDocument();
+  });
+
+  it("darwin에서는 OS 신호등이 있으므로 창 버튼을 그리지 않는다", () => {
+    createWindowApi({ platform: "darwin" });
+    renderTitleBar();
+
+    expect(screen.queryByRole("button", { name: "최소화" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "닫기" })).not.toBeInTheDocument();
+    expect(document.querySelector(".title-bar")?.className).toContain("title-bar-mac");
   });
 });

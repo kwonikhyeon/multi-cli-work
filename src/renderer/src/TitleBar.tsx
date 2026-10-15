@@ -38,6 +38,7 @@ export function TitleBar({
   usage = null,
   onRefreshUsage,
 }: TitleBarProps) {
+  const isMac = window.multiCliWork.platform === "darwin";
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openSubmenuId, setOpenSubmenuId] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
@@ -183,7 +184,7 @@ export function TitleBar({
   const attentionMark = attention ? ATTENTION_MARK[attention] : null;
 
   return (
-    <div className="title-bar">
+    <div className={isMac ? "title-bar title-bar-mac" : "title-bar"}>
       <div className="title-bar-menus" role="menubar" ref={menuBar} onKeyDown={handleKeyDown}>
         <span className="title-bar-icon" aria-hidden="true">
           <MonitorDot size={15} />
@@ -260,26 +261,28 @@ export function TitleBar({
         {usage ? <UsageGauge usage={usage} onOpen={() => onRefreshUsage?.()} /> : null}
       </div>
 
-      <div className="window-controls">
-        <button type="button" aria-label="최소화" onClick={() => void window.multiCliWork.window.minimize()}>
-          <Minus size={15} />
-        </button>
-        <button
-          type="button"
-          aria-label={maximized ? "이전 크기로 복원" : "최대화"}
-          onClick={() => void window.multiCliWork.window.toggleMaximize()}
-        >
-          {maximized ? <Copy size={13} /> : <Square size={13} />}
-        </button>
-        <button
-          type="button"
-          className="window-close"
-          aria-label="닫기"
-          onClick={() => void window.multiCliWork.window.close()}
-        >
-          <X size={16} />
-        </button>
-      </div>
+      {isMac ? null : (
+        <div className="window-controls">
+          <button type="button" aria-label="최소화" onClick={() => void window.multiCliWork.window.minimize()}>
+            <Minus size={15} />
+          </button>
+          <button
+            type="button"
+            aria-label={maximized ? "이전 크기로 복원" : "최대화"}
+            onClick={() => void window.multiCliWork.window.toggleMaximize()}
+          >
+            {maximized ? <Copy size={13} /> : <Square size={13} />}
+          </button>
+          <button
+            type="button"
+            className="window-close"
+            aria-label="닫기"
+            onClick={() => void window.multiCliWork.window.close()}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
