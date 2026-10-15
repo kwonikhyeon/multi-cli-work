@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ElementType, type RefObject 
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { OpenFileTab } from "./file-tabs";
+import { acceleratorLabel } from "./keymap";
 import { analyzeMarkdown, resolveMarkdownLink, toggleMarkdownTask } from "./markdown-document";
 import { lineSelection } from "./text-position";
 
@@ -199,6 +200,9 @@ export function FileViewerPane({
   const onRevealedRef = useRef(onRevealed);
   onRevealedRef.current = onRevealed;
   const loaded = !tab.loading && tab.content !== null;
+  const platform = window.multiCliWork.platform;
+  // 저장 단축키는 keymap의 file.save 기본값과 같은 자리를 가리켜야 한다 — macOS는 Cmd+S를 쓴다.
+  const saveShortcut = acceleratorLabel(platform === "darwin" ? "Cmd+S" : "Ctrl+S", platform);
 
   // A line is shown in the editor: a Markdown file leaves its preview for it.
   useEffect(() => {
@@ -249,7 +253,7 @@ export function FileViewerPane({
               onClick={onSave}
               disabled={!tab.dirty || tab.saving || tab.loading}
               aria-label={tab.saving ? "저장 중" : "저장"}
-              title="저장 (Ctrl+S)"
+              title={`저장 (${saveShortcut})`}
             >
               <Save size={16} />
             </button>

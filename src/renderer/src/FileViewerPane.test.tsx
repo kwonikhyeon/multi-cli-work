@@ -38,14 +38,15 @@ function props(overrides: Record<string, unknown> = {}) {
   };
 }
 
+beforeEach(() => {
+  window.multiCliWork = {
+    shell: { openExternal: vi.fn().mockResolvedValue(undefined) },
+    platform: "win32",
+  } as unknown as typeof window.multiCliWork;
+});
+
 describe("FileViewerPane Markdown preview", () => {
   afterEach(cleanup);
-
-  beforeEach(() => {
-    window.multiCliWork = {
-      shell: { openExternal: vi.fn().mockResolvedValue(undefined) },
-    } as unknown as typeof window.multiCliWork;
-  });
 
   it("renders GitHub-compatible heading ids, interactive GFM tasks, and no raw HTML", () => {
     const onAutoSaveContent = vi.fn();
@@ -106,9 +107,23 @@ describe("FileViewerPane Markdown preview", () => {
         })}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    const saveButton = screen.getByRole("button", { name: "저장" });
+    expect(saveButton).toHaveAttribute("title", "저장 (Ctrl+S)");
+    fireEvent.click(saveButton);
     expect(onSave).toHaveBeenCalledOnce();
     expect(screen.queryByRole("button", { name: "편집" })).not.toBeInTheDocument();
+  });
+
+  it("labels the save button with the Cmd glyph on macOS instead of the Windows/Linux Ctrl label", () => {
+    window.multiCliWork.platform = "darwin";
+    render(
+      <FileViewerPane
+        {...props({
+          tab: tab({ category: "text", extension: "txt", name: "notes.txt", content: "changed" }),
+        })}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "저장" })).toHaveAttribute("title", "저장 (⌘S)");
   });
 });
 

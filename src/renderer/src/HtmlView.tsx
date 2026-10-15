@@ -1,6 +1,7 @@
 import { Code2, Eye, RefreshCw, RotateCw, Save, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { OpenFileTab } from "./file-tabs";
+import { acceleratorLabel } from "./keymap";
 
 interface HtmlViewProps {
   tab: OpenFileTab;
@@ -33,6 +34,9 @@ export function HtmlView({ tab, onChangeContent, onSave, onClose }: HtmlViewProp
   viewIdRef.current ??= `html-preview-${++nextHtmlPreviewViewId}`;
   const viewId = viewIdRef.current;
   const editable = tab.encoding === "utf8" && !tab.truncated;
+  const platform = window.multiCliWork.platform;
+  // 저장 단축키는 keymap의 file.save 기본값과 같은 자리를 가리켜야 한다 — macOS는 Cmd+S를 쓴다.
+  const saveShortcut = acceleratorLabel(platform === "darwin" ? "Cmd+S" : "Ctrl+S", platform);
 
   useEffect(() => {
     if (mode !== "preview") return;
@@ -125,7 +129,7 @@ export function HtmlView({ tab, onChangeContent, onSave, onClose }: HtmlViewProp
               onClick={onSave}
               disabled={!editable || !tab.dirty || tab.saving || tab.loading}
               aria-label="저장"
-              title="저장 (Ctrl+S)"
+              title={`저장 (${saveShortcut})`}
             >
               <Save size={16} />
             </button>
