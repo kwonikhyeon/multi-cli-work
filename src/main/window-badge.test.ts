@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AttentionSnapshot } from "./attention-policy";
-import { attentionDotBitmap, taskbarBadgeSpec, trayTooltip } from "./window-badge";
+import { attentionDotBitmap, dockBadgeText, taskbarBadgeSpec, trayTooltip } from "./window-badge";
 
 const quiet: AttentionSnapshot = { window: "none", unread: {} };
 const waiting: AttentionSnapshot = {
@@ -40,5 +40,13 @@ describe("trayTooltip", () => {
 
   it("appends the waiting count", () => {
     expect(trayTooltip(waiting)).toBe("멀티 터미널 작업기 — 응답 대기 2개");
+  });
+});
+
+describe("dockBadgeText", () => {
+  it("사이드바 배지와 같은 의미의 글자를 Dock에 단다", () => {
+    expect(dockBadgeText("approval")).toBe("!");
+    expect(dockBadgeText("input")).toBe("●");
+    expect(dockBadgeText("none")).toBe("");
   });
 });

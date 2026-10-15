@@ -56,3 +56,10 @@ export function trayTooltip(snapshot: AttentionSnapshot): string {
   const count = Object.keys(snapshot.unread).length;
   return count === 0 ? APP_TRAY_TOOLTIP : `${APP_TRAY_TOOLTIP} — 응답 대기 ${count}개`;
 }
+
+/** Dock 배지는 overlay 아이콘을 그릴 수 없으므로 TitleBar의 주의 표시와 같은 글자를 쓴다. */
+export function dockBadgeText(attention: WindowAttention): string {
+  if (attention === "approval") return "!";
+  if (attention === "input") return "●";
+  return "";
+}

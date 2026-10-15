@@ -4,7 +4,7 @@ import { createDesktopRuntime, type DesktopRuntime } from "./runtime";
 import { trayIconDataUrl } from "./tray-icon";
 import { checkForUpdates, initUpdater, quitAndInstall } from "./updater";
 import { APP_WINDOW_TITLE, applyWindowAttention } from "./window-attention";
-import { taskbarBadgeSpec, trayTooltip } from "./window-badge";
+import { dockBadgeText, taskbarBadgeSpec, trayTooltip } from "./window-badge";
 import type { AttentionSnapshot } from "./attention-policy";
 import type { WindowChromeState } from "../shared/api-types";
 import { QuitCoordinator } from "./quit-coordinator";
@@ -118,6 +118,7 @@ function applyAttentionSnapshot(window: BrowserWindow, snapshot: AttentionSnapsh
   } else {
     window.setOverlayIcon(null, "");
   }
+  if (process.platform === "darwin") app.dock?.setBadge(dockBadgeText(snapshot.window));
 }
 
 function updateWindowAttention(snapshot: AttentionSnapshot): void {
@@ -235,10 +236,27 @@ if (!hasSingleInstanceLock) {
     restoreMainWindow();
   });
 
+  // macOS: Dock 아이콘 클릭(활성화)이 숨긴 창을 되살린다 — 트레이 더블클릭과 같은 길.
+  if (process.platform === "darwin") {
+    app.on("activate", () => {
+      if (!runtime || !mainWindow) {
+        shouldFocusWhenReady = true;
+        return;
+      }
+      restoreMainWindow();
+    });
+  }
+
   void app.whenReady().then(async () => {
-    // The renderer draws its own menu bar; Electron's default one would only stack a second,
-    // English row on top of it. The tray still builds a menu of its own.
-    Menu.setApplicationMenu(null);
+    // The renderer draws its own menu bar. On macOS the system menu bar still has to exist for
+    // Cmd+Q/C/V/H/M and dictation to work, so a minimal role-only menu replaces null there.
+    if (process.platform === "darwin") {
+      Menu.setApplicationMenu(
+        Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "windowMenu" }]),
+      );
+    } else {
+      Menu.setApplicationMenu(null);
+    }
     try {
       runtime = await createDesktopRuntime(showMainWindow, installUpdateAndQuit, updateWindowAttention, {
         // Lazy: the runtime is constructed before the window exists (the next line).
@@ -268,10 +286,6 @@ if (!hasSingleInstanceLock) {
       app.quit();
       return;
     }
-
-    app.on("activate", () => {
-      restoreMainWindow();
-    });
   });
 
   app.on("before-quit", (event) => {
