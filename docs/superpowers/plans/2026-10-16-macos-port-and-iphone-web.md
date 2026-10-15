@@ -1062,13 +1062,36 @@ git commit -m "test: run the e2e smoke suite on macOS"
 
 **Files:** 없음 (검증만; 발견된 버그는 각각 유닛 테스트와 함께 고쳐 개별 커밋)
 
-- [ ] **Step 1: `jk` 제어 CLI** — zsh 세션에서 `which jk` → userData의 `bin/jk`(패키징본은 `~/Library/Application Support/multi-cli-work/bin/jk`) 확인, `jk --help` 실행, `echo $JK_CODING_CLI_ENDPOINT $JK_CODING_CLI_TOKEN`이 세션 환경에 있는지 확인(POSIX 경로는 named pipe 대신 이 둘을 쓴다).
-- [ ] **Step 2: Python3** — `python3 --version`이 CLT 동봉판으로 응답(상태 훅 의존).
-- [ ] **Step 3: safeStorage** — 설정 › 노션에 아무 토큰이나 저장 → 앱 재시작 → 저장 상태 유지 확인(Keychain 암호화 경로) → 토큰 삭제.
-- [ ] **Step 4: 진행률** — 세션에서 `printf '\e]9;4;1;50\a'` 실행 → 패인 진행선과 Dock 아이콘 진행률 표시 확인, `printf '\e]9;4;0;0\a'`로 해제.
-- [ ] **Step 5: 전역 단축키** — 설정 › 일반의 소환 단축키를 등록하고 창을 숨긴 뒤 복귀 확인.
-- [ ] **Step 6: Google Drive 루트** — 설정의 워크스페이스 루트에 아무 로컬 폴더를 수동 지정해 업무 프로젝트 스캔이 도는지 확인(darwin 자동 탐지는 범위 밖).
-- [ ] **Step 7: 결과 기록** — 체크 결과를 이 플랜 파일에 채워 커밋: `git commit -am "chore: record macOS manual verification"`
+**성격:** 이 태스크는 **사람이 GUI 앞에서 하는 검증만**으로 이뤄진다. 자동화 가능한 항목은 선행 태스크에서 이미 실행했고, 여기 남은 것은 Gatekeeper 우클릭·Keychain 승인·Dock 클릭·OS 알림 권한처럼 클릭과 눈이 필요한 것뿐이다. 각 항목은 Task 1–12가 "수동 확인 필요"로 넘긴 것들을 출처와 함께 모았다.
+
+**준비:** `npm run dist:mac`으로 만든 `release/Multi-CLI-Work-1.48.0-mac-arm64.dmg` (Task 11에서 생성됨).
+
+- [ ] **Step 1: 설치와 Gatekeeper** (Task 11 Step 4) — dmg를 열어 `/Applications`로 복사 → Finder에서 **우클릭 ▸ 열기**로 실행. ad-hoc 서명이라 더블클릭은 차단되는 것이 정상이며, 우클릭 열기 한 번 뒤로는 그냥 열린다. 기동 직후 **GPU 크래시가 재발하지 않는지** 함께 본다(Task 1에서 1회 발생 후 무해로 판단한 건).
+- [ ] **Step 2: zsh 세션** (Task 4, Task 11 Step 4) — 새 세션 런처에 **zsh**가 보이고 그것으로 세션을 만들면 `echo $SHELL`이 zsh로 응답하는지. 입출력·종료가 정상인지(패키징본에서 `spawn-helper`가 실제로 실행되는지를 확인하는 유일한 경로 — 자동 검증은 파일 존재와 실행 비트까지만 했다).
+- [ ] **Step 3: 트레이 상주와 복귀** (Task 9, 10, 11 Step 4) — 창을 닫아 메뉴바 트레이로 내려간 뒤 ① 트레이 아이콘으로 복귀, ② **Dock 아이콘 클릭으로 복귀**(`app.on("activate")` 경로) 둘 다 확인. macOS 트레이는 단일 클릭이 컨텍스트 메뉴를 열어 `double-click` 이벤트가 오지 않을 수 있는데, 컨텍스트 메뉴의 "멀티 터미널 작업기 표시"와 Dock 복귀가 있으므로 기능 손실은 아니다 — 실제로 어느 경로가 동작하는지 기록한다.
+- [ ] **Step 4: 메뉴바와 Cmd+Q** (Task 9) — 메뉴바에 앱 메뉴(앱·편집·창 3개)가 보이는지. 세션 하나를 띄운 채 **Cmd+Q**로 종료 → 재시작했을 때 중단 세션 복원 안내가 뜨는지.
+- [ ] **Step 5: Cmd 단축키** (Task 5, 6, 7, 9, 12) — ① 리매핑된 Cmd 조합 앱 단축키가 실제로 동작하는지, ② **터미널에서 Cmd+C / Cmd+V**(Task 9의 `editMenu` role이 들어온 뒤 재검), ③ 입력창에서 Cmd+C / Cmd+V, ④ **원격 창에서 Cmd+C / Cmd+V**, ⑤ 설정과 타이틀바 메뉴의 단축키 라벨이 ⌘·⌥·⇧ 기호로 보이는지.
+
+  ②는 **이 수동 검증이 유일한 커버리지다.** `TerminalPane`은 darwin에서 자체 Ctrl+C/V 처리를 건너뛰고(`if (isMac) return true;`) 네이티브 클립보드 이벤트에 맡긴다. `desktop.spec.ts:538`의 클립보드 테스트는 `Ctrl+V`와 `Ctrl+Shift+V` **두 개**의 붙여넣기 단축키가 각각 "정확히 한 번" 먹는지를 단정하는데(`:558`·`:571`) darwin에는 조작당 클립보드 키가 Cmd+V 하나뿐이라 1:1 대응이 없다 — Task 12가 고치지 못하고 기록만 남긴 유일한 항목이다. 어긋나면 테스트 전략 자체를 바꿔야 하므로 결과를 구체적으로 적는다.
+
+  ④는 반대로 **Task 12가 자동 커버리지를 확보했다.** 원격 창은 `TerminalPane`이 아니라 `src/renderer/src/mobile/terminal-input.ts`의 `clipboardKeyAction`을 타는데 거기에 darwin 분기가 없어 Ctrl+C가 SIGINT를 삼키고 Ctrl+V가 죽어 있었다. Task 12가 `isApplePlatform`으로 분기를 넣고 `remote-window.spec.ts`를 darwin에서 `Meta+V`·`Meta+C`로 돌려 통과시켰다. 이 항목은 회귀 확인이다.
+- [ ] **Step 6: 아이콘 시각 확인** (Task 10, 11) — ① 메뉴바의 `>_` 템플릿 글리프가 **라이트/다크 모드 양쪽에서** 또렷한지(시스템 설정 ▸ 모양새로 전환), ② `build/icon-mac.png`는 256×256을 1024로 업스케일한 것이므로 **Dock·Finder 큰 아이콘의 선명도**를 확인하고, 뭉개지면 고해상도 원본으로 교체한다.
+- [ ] **Step 7: 업데이트 안내와 알림** (Task 8, 11 Step 4) — ① 업데이트 배지가 자동 다운로드가 아니라 `수동 업데이트`+`릴리스` 안내로 뜨는지, ② 세션을 입력 대기로 만들어 **데스크톱 알림**이 오는지(첫 알림에서 OS 권한을 허용해야 하고, 안 오면 시스템 설정 ▸ 알림에서 앱 상태를 확인).
+- [ ] **Step 8: 타이틀바 신호등 인셋** (Task 3) — `npm run dev`에서 네이티브 신호등 버튼과 앱이 그린 타이틀바 내용이 겹치지 않는지(`.title-bar-mac`의 `padding-left: 76px`).
+- [ ] **Step 9: `jk` 제어 CLI** — zsh 세션에서 `which jk` → userData의 `bin/jk`(패키징본은 `~/Library/Application Support/multi-cli-work/bin/jk`) 확인, `jk --help` 실행, `echo $JK_CODING_CLI_ENDPOINT $JK_CODING_CLI_TOKEN`이 세션 환경에 있는지 확인(POSIX 경로는 named pipe 대신 이 둘을 쓴다). 스크립트 **문법** 호환은 이미 확정됐으므로(아래 Step 10) 남은 것은 런타임 동작뿐이다.
+- [ ] **Step 10: Python3** — **자동 확인 완료**: `CONTROL_CLI_PYTHON`을 CLT 동봉 `/usr/bin/python3`(3.9.6)과 Homebrew(3.14.3) 양쪽에서 `py_compile`로 통과시켰다. 이 단계는 `python3 --version`이 응답하는지만 기록하면 끝이다(상태 훅 의존).
+- [ ] **Step 11: safeStorage** — 설정 › 노션에 아무 토큰이나 저장 → 앱 재시작 → 저장 상태 유지 확인(Keychain 암호화 경로) → 토큰 삭제.
+- [ ] **Step 12: 진행률** — 세션에서 `printf '\e]9;4;1;50\a'` 실행 → 패인 진행선과 Dock 아이콘 진행률 표시 확인, `printf '\e]9;4;0;0\a'`로 해제.
+- [ ] **Step 13: 전역 소환 단축키** — 설정 › 일반의 소환 단축키를 등록하고 창을 숨긴 뒤 복귀 확인. **Cmd 조합은 아직 선택할 수 없으므로**(Task 5의 보류 Minor — `SettingsDialog.tsx`의 캡처와 `ipc-validation.ts`의 검증이 Cmd를 받지 않는다) `Alt+Space`·`Ctrl+Alt+K`류로 확인한다.
+- [ ] **Step 14: Google Drive 루트** — 설정의 워크스페이스 루트에 아무 로컬 폴더를 수동 지정해 업무 프로젝트 스캔이 도는지 확인(darwin 자동 탐지는 범위 밖).
+- [ ] **Step 15: 결과 기록** — 체크 결과를 이 플랜 파일의 각 체크박스에 채운다. 어긋난 항목은 해당 소스를 유닛 테스트와 함께 고쳐 **개별 커밋**하고, 그 뒤 체크리스트만 커밋한다:
+
+```bash
+git add docs/superpowers/plans/2026-10-16-macos-port-and-iphone-web.md
+git commit -m "chore: record macOS manual verification"
+```
+
+(`git commit -am`을 쓰지 않는다 — 추적 중인 다른 수정 파일을 함께 쓸어 담는다.)
 
 ---
 
@@ -1254,16 +1277,25 @@ git commit -m "feat: iphone install guidance on the remote install page"
 
 **Files:** 없음 (검증만; 발견 버그는 개별 수정·커밋)
 
+**성격:** Task 13과 마찬가지로 **사람이 실기기 앞에서 하는 검증만**으로 이뤄진다. 모든 항목이 물리 iPhone, Tailscale 로그인, Safari 홈 화면 추가 제스처를 요구하므로 자동화할 수 있는 부분이 없다.
+
 **준비:** Mac에서 패키징본(또는 `npm run dev`) 실행 → 설정 ▸ 원격 ▸ 원격 접속 허용 ON. iPhone에 Tailscale 설치·로그인(같은 tailnet).
 
 - [ ] **Step 1: 접속·페어링** — iPhone Safari에서 `http://<Mac의 Tailscale 주소>:<포트>/mobile/` → 페어링 코드 입력 → 세션 목록 표시.
-- [ ] **Step 2: 홈 화면 추가** — 공유 ▸ 홈 화면에 추가 → 아이콘(Task 14)이 제대로 보이고, 열면 Safari UI 없는 전체 화면 + 상태바 영역이 자연스러운지(black-translucent).
+- [ ] **Step 2: 홈 화면 추가** — 공유 ▸ 홈 화면에 추가 → 아이콘(Task 14)이 제대로 보이고, 열면 Safari UI 없는 전체 화면 + 상태바 영역이 자연스러운지(black-translucent). 아이콘은 **모서리를 특히 본다**: `build/icon.png`은 둥근 모서리가 투명한 RGBA(투명 3.3%, 반지름 ≈ 원본의 19.5%)이고 iOS는 투명 영역을 검정으로 합성한 뒤 자체 마스크를 씌운다. 두 반지름이 어긋나면 모서리에 검은 띠가 비친다 — 보이면 불투명 배경으로 합성한 아이콘으로 교체한다(sips로는 내부 알파를 못 메운다).
 - [ ] **Step 3: 터미널 입출력** — 세션 열어 명령 실행, 출력 스크롤(관성), 맨 아래로 복귀 동작.
 - [ ] **Step 4: 키보드** — 입력줄 포커스 시 키보드가 내용을 가리지 않고(visualViewport 리사이즈), 닫을 때 복원.
 - [ ] **Step 5: 회전** — 가로 모드에서 좌우 safe-area(Task 15)와 레이아웃 확인.
 - [ ] **Step 6: 재시작 유지** — 홈 화면 앱을 완전히 내렸다 다시 열어 페어링 유지(localStorage) 확인.
 - [ ] **Step 7: 대기 점프·상태 색** — 데스크톱에서 세션 하나를 입력 대기로 만들고, 폰의 **대기** 버튼이 그 세션으로 가는지.
-- [ ] **Step 8: 결과 기록** — 어긋난 항목은 `src/renderer/src/mobile/`의 해당 모듈(`touch-scroll`·`terminal-input`·`auto-fit`·`initial-size`)에 유닛 테스트와 함께 고치고 개별 커밋. 체크 결과를 이 플랜에 채워 커밋: `git commit -am "chore: record iPhone web verification"`
+- [ ] **Step 8: 결과 기록** — 어긋난 항목은 `src/renderer/src/mobile/`의 해당 모듈(`touch-scroll`·`terminal-input`·`auto-fit`·`initial-size`)에 유닛 테스트와 함께 고치고 **개별 커밋**한다. 그 뒤 체크 결과를 이 플랜에 채워 체크리스트만 커밋한다:
+
+```bash
+git add docs/superpowers/plans/2026-10-16-macos-port-and-iphone-web.md
+git commit -m "chore: record iPhone web verification"
+```
+
+(`git commit -am`을 쓰지 않는다 — 추적 중인 다른 수정 파일을 함께 쓸어 담는다.)
 
 ---
 
