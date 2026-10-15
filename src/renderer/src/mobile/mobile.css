@@ -9,7 +9,7 @@
 }
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
-body { background: var(--m-bg); color: var(--m-text); font: 15px/1.4 system-ui, sans-serif; }
+body { background: var(--m-bg); color: var(--m-text); font: 15px/1.4 system-ui, sans-serif; padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 button { font: inherit; color: inherit; background: var(--m-surface); border: 1px solid #2a2f36; border-radius: 8px; padding: 8px 12px; min-height: 40px; }
 input, textarea { font: inherit; color: inherit; background: var(--m-surface); border: 1px solid #2a2f36; border-radius: 8px; padding: 8px; width: 100%; }
 .m-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); }
@@ -78,6 +78,6 @@ select { font: inherit; color: inherit; background: var(--m-surface); border: 1p
 .m-new-session .m-empty, .m-new-session .m-notice { padding: 0; margin: 0; }
 .m-new-session-actions { display: flex; gap: 6px; }
 .m-new-session-actions button { flex: 1 1 0; }
-.m-toast { position: fixed; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); z-index: 10; display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border: 1px solid #ff6b6b; border-radius: 8px; background: var(--m-surface); color: var(--m-text); }
+.m-toast { position: fixed; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); z-index: 10; display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border: 1px solid #ff6b6b; border-radius: 8px; background: var(--m-surface); color: var(--m-text); }
 .m-toast span { flex: 1 1 auto; min-width: 0; }
 .m-toast button { flex: 0 0 auto; }
