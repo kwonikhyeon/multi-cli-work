@@ -26,6 +26,7 @@ import {
   PanelLeftOpen,
   RefreshCw,
   SquareTerminal,
+  Star,
   Tag,
   TriangleAlert,
   X,
@@ -198,6 +199,7 @@ interface ProjectSidebarProps {
 const SIDEBAR_STATE_KEY = "multi-cli-work.sidebar.v1";
 
 interface SidebarPrefs {
+  favoriteProjectIds: string[];
   expandedWorkspaces: string[];
   openShelves: ShelfKind[];
   sessionPanelOpen: boolean;
@@ -216,6 +218,7 @@ interface SidebarPrefs {
  */
 function readSidebarState(): SidebarPrefs {
   const empty: SidebarPrefs = {
+    favoriteProjectIds: [],
     expandedWorkspaces: [],
     openShelves: [],
     sessionPanelOpen: true,
@@ -225,6 +228,7 @@ function readSidebarState(): SidebarPrefs {
   };
   try {
     const value = JSON.parse(localStorage.getItem(SIDEBAR_STATE_KEY) ?? "{}") as {
+      favoriteProjectIds?: unknown;
       expandedWorkspaces?: string[];
       openShelves?: unknown[];
       sessionPanelOpen?: unknown;
@@ -233,6 +237,9 @@ function readSidebarState(): SidebarPrefs {
       groupingTags?: unknown;
     };
     return {
+      favoriteProjectIds: Array.isArray(value.favoriteProjectIds)
+        ? [...new Set(value.favoriteProjectIds.filter((id): id is string => typeof id === "string"))]
+        : [],
       expandedWorkspaces: value.expandedWorkspaces ?? [],
       openShelves: (value.openShelves ?? []).filter((kind): kind is ShelfKind =>
         SHELF_KINDS.includes(kind as ShelfKind),
@@ -355,8 +362,13 @@ export function ProjectSidebar({
     position: DropPosition;
   } | null>(null);
   const flashRow = useRef<HTMLDivElement | null>(null);
-  // 다섯 값이 한 레코드에서 오므로 마운트 때 한 번만 읽는다.
+  // 사이드바 선호는 한 레코드에서 오므로 마운트 때 한 번만 읽는다.
   const [savedSidebarState] = useState(readSidebarState);
+  const [favoriteProjectIds, setFavoriteProjectIds] = useState(savedSidebarState.favoriteProjectIds);
+  const favoriteProjects = favoriteProjectIds.flatMap((id) => {
+    const project = projects.find((candidate) => candidate.id === id);
+    return project ? [project] : [];
+  });
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(
     () => new Set(savedSidebarState.expandedWorkspaces),
   );
@@ -378,6 +390,7 @@ export function ProjectSidebar({
         SIDEBAR_STATE_KEY,
         JSON.stringify({
           version: 1,
+          favoriteProjectIds: next.favoriteProjectIds,
           expandedWorkspaces: next.expandedWorkspaces,
           openShelves: next.openShelves,
           sessionPanelOpen: next.sessionPanelOpen,
@@ -388,6 +401,28 @@ export function ProjectSidebar({
         }),
       );
     } catch { /* unavailable storage */ }
+  };
+  const toggleFavorite = (projectId: string) => {
+    const current = prefsRef.current.favoriteProjectIds;
+    const next = current.includes(projectId) ? current.filter((id) => id !== projectId) : [...current, projectId];
+    setFavoriteProjectIds(next);
+    persist({ favoriteProjectIds: next });
+  };
+  const renderFavoriteToggle = (project: SharedProject) => {
+    const favorite = favoriteProjectIds.includes(project.id);
+    const label = `${projectName(project)} 즐겨찾기 ${favorite ? "해제" : "추가"}`;
+    return (
+      <button
+        type="button"
+        className={`icon-button project-favorite-toggle ${favorite ? "is-favorite" : ""}`}
+        onClick={() => toggleFavorite(project.id)}
+        aria-label={label}
+        aria-pressed={favorite}
+        title={label}
+      >
+        <Star size={14} fill={favorite ? "currentColor" : "none"} aria-hidden="true" />
+      </button>
+    );
   };
   const toggleWorkspace = (key: string) => setExpandedWorkspaces((current) => {
     const next = new Set(current);
@@ -726,7 +761,9 @@ export function ProjectSidebar({
           title={name}
           aria-label={`${name} 폴더 선택${details.map((detail) => ` (${detail})`).join("")}`}
         >
-          {rootMissing ? <FolderX size={15} aria-hidden="true" /> : <Folder size={15} />}
+          {rootMissing ? <FolderX size={15} aria-hidden="true" /> : favoriteProjectIds.includes(project.id)
+            ? <Star size={15} className="favorite-star" fill="currentColor" aria-hidden="true" />
+            : <Folder size={15} />}
           {active ? <span className="folder-activity-dot" aria-hidden="true" /> : null}
           {attention ? <span className={`unread-dot unread-${attention}`} aria-hidden="true" /> : null}
         </button>
@@ -1031,6 +1068,7 @@ export function ProjectSidebar({
                           ) : null}
                         </span>
                       </button>
+                      {renderFavoriteToggle(project)}
                     </div>
                     {editingProjectId === project.id ? (
                       <ProjectMetadataEditor project={project} onSaved={onProjectSaved} onClose={onCloseEditor} />
@@ -1345,10 +1383,36 @@ export function ProjectSidebar({
 
       {collapsed ? (
         <div className="sidebar-rail-sessions" aria-label="폴더 바로가기">
-          <ul role="list">{projects.map(renderRailProject)}</ul>
+          <ul role="list">{[...favoriteProjects, ...projects.filter((project) => !favoriteProjectIds.includes(project.id))].map(renderRailProject)}</ul>
         </div>
       ) : (
       <nav className="project-navigation" aria-label="프로젝트">
+        <section className="project-favorites" aria-label="즐겨찾기">
+          <div className="section-heading"><Star size={13} aria-hidden="true" /><span>즐겨찾기</span></div>
+          {favoriteProjects.length === 0 ? (
+            <p className="project-favorites-empty">폴더 옆 별표로 자주 쓰는 폴더를 고정하세요</p>
+          ) : (
+            <ul className="project-favorites-list">
+              {favoriteProjects.map((project) => (
+                <li key={project.id} className={`favorite-project-row ${selectedProjectId === project.id && !selectedWorktreeId ? "selected" : ""}`}>
+                  <button
+                    type="button"
+                    className="project-select"
+                    onClick={() => onSelectProject(project.id)}
+                    onContextMenu={(event) => onProjectContextMenu(project, event)}
+                    aria-label={`${projectName(project)} 즐겨찾기 열기`}
+                    title={project.rootPath}
+                  >
+                    {snapshot?.missingRootProjectIds.includes(project.id)
+                      ? <FolderX size={15} aria-label="폴더 없음" /> : <Folder size={15} aria-hidden="true" />}
+                    <span className="project-copy"><span className="project-name">{projectName(project)}</span></span>
+                  </button>
+                  {renderFavoriteToggle(project)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
         <div className="section-heading">
           <span>프로젝트</span>
           <button

@@ -63,7 +63,10 @@ const openMenu = async (name: string) => {
   return screen.findByRole("menu");
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("FileExplorer context menu", () => {
   beforeEach(() => {
@@ -373,7 +376,7 @@ describe("FileExplorer change highlighting", () => {
     await waitFor(() => expect(readmeRow.className).not.toMatch(/change-/));
   });
 
-  it("re-pulls only changedPaths, never the directory listing, on an mcw:agent-edits notification", async () => {
+  it("updates agent highlights without automatically refreshing the file list", async () => {
     changedPaths.mockResolvedValue({ agentPaths: [], baselineMs: 0 });
     renderExplorer();
     await row("readme.md");
@@ -381,9 +384,11 @@ describe("FileExplorer change highlighting", () => {
     changedPaths.mockClear();
 
     changedPaths.mockResolvedValue({ agentPaths: [{ relativePath: "readme.md", kind: "file", at: 2 }], baselineMs: 0 });
+    listDirectory.mockResolvedValue([file, { ...file, name: "created.md", relativePath: "created.md" }]);
     fireEvent(window, new Event("mcw:agent-edits"));
 
     await waitFor(() => expect(changedPaths).toHaveBeenCalledWith(target));
+    expect(screen.queryByText("created.md")).not.toBeInTheDocument();
     expect(listDirectory).not.toHaveBeenCalled();
   });
 });
@@ -400,6 +405,82 @@ describe("FileExplorer directory request ownership", () => {
         git: { panelData }, clipboard: { writeText },
       },
     });
+  });
+
+  it("refreshes external additions, renames, edits and deletions on demand without collapsing the tree", async () => {
+    listDirectory.mockImplementation(async (_target, dir) => dir === "" ? [folder, file] : [nested]);
+    renderExplorer();
+    fireEvent.click(await row("src"));
+    fireEvent.click(await row("readme.md"));
+    await row("main.ts");
+
+    listDirectory.mockImplementation(async (_target, dir) => dir === ""
+      ? [folder, { ...file, mtimeMs: 10 }, { ...file, name: "new.md", relativePath: "new.md" }]
+      : [{ ...nested, name: "renamed.ts", relativePath: "src/renamed.ts" }]);
+    fireEvent(window, new Event("mcw:files-refresh"));
+    await screen.findByText("new.md");
+    await screen.findByText("renamed.ts");
+
+    expect(screen.getByText("new.md")).toBeInTheDocument();
+    expect(screen.getByText("renamed.ts")).toBeInTheDocument();
+    expect(screen.queryByText("main.ts")).not.toBeInTheDocument();
+    expect(screen.getByText("readme.md").closest("button")).toHaveClass("selected", "change-local");
+    expect(screen.queryByText("불러오는 중")).not.toBeInTheDocument();
+
+    listDirectory.mockImplementation(async (_target, dir) => dir === "" ? [folder] : []);
+    fireEvent.click(screen.getByRole("button", { name: "파일 목록 새로고침" }));
+    await waitFor(() => expect(screen.queryByText("readme.md")).not.toBeInTheDocument());
+    expect(screen.queryByText("new.md")).not.toBeInTheDocument();
+    expect(screen.queryByText("readme.md")).not.toBeInTheDocument();
+    expect(screen.getByText("비어 있음")).toBeInTheDocument();
+  });
+
+  it("does not poll or refresh on window focus while the tree is visible", async () => {
+    vi.useFakeTimers();
+    listDirectory.mockResolvedValue([file]);
+    renderExplorer();
+    await act(async () => {});
+    listDirectory.mockClear();
+    listDirectory.mockResolvedValue([{ ...file, name: "external.md", relativePath: "external.md" }]);
+    fireEvent(window, new Event("focus"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(listDirectory).not.toHaveBeenCalled();
+    expect(screen.queryByText("external.md")).not.toBeInTheDocument();
+  });
+
+  it("keeps the last listing while a refresh is pending and retries a failed refresh", async () => {
+    listDirectory.mockResolvedValue([file]);
+    renderExplorer();
+    await row("readme.md");
+    const pending = deferred<FileTreeEntry[]>();
+    fireEvent.contextMenu(screen.getByRole("tree"), { clientX: 5, clientY: 5 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "새 파일" }));
+    fireEvent.change(screen.getByLabelText("파일 이름"), { target: { value: "draft.md" } });
+    listDirectory.mockClear();
+    listDirectory.mockReturnValueOnce(pending.promise);
+    fireEvent(window, new Event("mcw:files-refresh"));
+    expect(listDirectory).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("readme.md")).toBeInTheDocument();
+    await act(async () => pending.reject(new Error("temporary failure")));
+    expect(screen.getByText("readme.md")).toBeInTheDocument();
+    expect(screen.getByLabelText("파일 이름")).toHaveValue("draft.md");
+    expect(screen.getByRole("alert")).toHaveTextContent("temporary failure");
+    listDirectory.mockResolvedValue([{ ...file, name: "recovered.md", relativePath: "recovered.md" }]);
+    fireEvent(window, new Event("mcw:files-refresh"));
+    expect(await screen.findByText("recovered.md")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("updates Git marks when expanding a directory reveals an external edit", async () => {
+    listDirectory.mockImplementation(async (_target, dir) => dir === "" ? [folder] : [nested]);
+    renderExplorer();
+    fireEvent.click(await row("src"));
+    await row("main.ts");
+    fireEvent.click(await row("src"));
+    listDirectory.mockImplementation(async (_target, dir) => dir === "" ? [folder] : [{ ...nested, mtimeMs: 20 }]);
+    panelData.mockResolvedValue({ isRepo: true, currentBranch: "main", branches: ["main"], changes: [{ path: "src/main.ts", status: "M" }], ignored: [] });
+    fireEvent.click(await row("src"));
+    await waitFor(() => expect(screen.getByText("main.ts").closest("button")).toHaveClass("git-modified"));
   });
 
   it("ignores a directory success from the previously selected target", async () => {

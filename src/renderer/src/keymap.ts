@@ -40,6 +40,7 @@ const action = (
 export const KEYMAP_ACTIONS: readonly KeymapAction[] = [
   action("view.quick-open", "빠른 열기", "일반", "Ctrl+P"),
   action("file.save", "파일 저장", "일반", "Ctrl+S"),
+  action("file.refresh", "파일 목록 새로고침", "보기", "F5"),
   action("settings.open", "설정 열기", "일반", "Ctrl+,"),
   action("view.zoom-in", "확대", "보기", "Ctrl+="),
   action("view.zoom-out", "축소", "보기", "Ctrl+-"),
@@ -49,7 +50,7 @@ export const KEYMAP_ACTIONS: readonly KeymapAction[] = [
   // Ctrl+R 기본값은 의도적으로 없다 — 오타 한 번의 리로드가 세션 화면을 날린다.
   action("view.reload", "다시 로드", "보기", null),
   action("view.zoom-pane", "패인 확대/해제", "보기", "Ctrl+Shift+Enter", { ignoreWhileTyping: true }),
-  action("session.refresh", "세션 새로고침", "세션", "F5"),
+  action("session.refresh", "세션 새로고침", "세션", null),
   action("session.next", "다음 세션", "세션", "Ctrl+Tab", { ignoreWhileTyping: true }),
   action("session.prev", "이전 세션", "세션", "Ctrl+Shift+Tab", { ignoreWhileTyping: true }),
   action("session.next-waiting", "다음 대기 세션", "세션", "Ctrl+Shift+U", { ignoreWhileTyping: true }),

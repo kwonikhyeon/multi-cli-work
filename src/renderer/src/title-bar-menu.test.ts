@@ -169,12 +169,13 @@ describe("buildTitleBarMenus", () => {
     expect(menus[menus.length - 2]!.id).toBe("help");
   });
 
-  it("단축키 표기가 키맵 기본값에서 나온다 — 세션 새로고침은 F5를 얻는다", () => {
+  it("단축키 표기가 키맵 기본값에서 나온다 — 파일 목록 새로고침은 F5를 얻는다", () => {
     const menus = buildTitleBarMenus({ ...settingsButtonContext, session: { status: "working", tool: false, refreshing: false } });
     expect(findItem(menus, "view", "view.quick-open")?.shortcut).toBe("Ctrl+P");
     expect(findItem(menus, "file", "file.save")?.shortcut).toBe("Ctrl+S");
     expect(findItem(menus, "view", "view.zoom-in")?.shortcut).toBe("Ctrl+=");
-    expect(findItem(menus, "session", "session.refresh")?.shortcut).toBe("F5");
+    expect(findItem(menus, "view", "file.refresh")?.shortcut).toBe("F5");
+    expect(findItem(menus, "session", "session.refresh")?.shortcut).toBeUndefined();
     expect(findItem(menus, "view", "view.reload")?.shortcut).toBeUndefined();
     expect(findItem(menus, "edit", "edit.paste")?.shortcut).toBe("Ctrl+V");
   });

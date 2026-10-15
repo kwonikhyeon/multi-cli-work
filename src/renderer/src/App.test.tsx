@@ -704,6 +704,23 @@ function xtermFor(sessionId: string) {
 }
 
 describe("folder workspace", () => {
+  it("keeps favorite folder shortcuts across remounts and lets them open and unpin a folder", async () => {
+    window.multiCliWork = createApi({ projects: [atlas, dashboard] }).api;
+    const view = render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Dashboard 즐겨찾기 추가" }));
+    const favorites = screen.getByRole("region", { name: "즐겨찾기" });
+    expect(within(favorites).getByRole("button", { name: "Dashboard 즐겨찾기 열기" })).toHaveAttribute("title", dashboard.rootPath);
+    view.unmount();
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Dashboard 즐겨찾기 열기" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Dashboard 폴더 선택" }).closest(".project-row")).toHaveClass("selected"));
+    fireEvent.click(within(screen.getByRole("region", { name: "즐겨찾기" })).getByRole("button", { name: "Dashboard 즐겨찾기 해제" }));
+    expect(screen.queryByRole("button", { name: "Dashboard 즐겨찾기 열기" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dashboard 즐겨찾기 추가" })).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("multi-cli-work.sidebar.v1")!).favoriteProjectIds).toEqual([]);
+  });
+
   it("loads opened folders and lays the restored folder's sessions out in the grid", async () => {
     const harness = createApi();
     window.multiCliWork = harness.api;
@@ -4733,13 +4750,21 @@ describe("settings entry points", () => {
 });
 
 describe("keymap dispatcher", () => {
-  it("F5가 선택된 세션을 새로고침한다", async () => {
+  it("F5 refreshes files without reloading the window or session", async () => {
     const harness = createApi();
     window.multiCliWork = harness.api;
     render(<App />);
     await xtermFor(powershellSession.id);
-    fireEvent.keyDown(window, { key: "F5" });
-    await waitFor(() => expect(harness.api.terminals.refresh).toHaveBeenCalledWith(powershellSession.id));
+    await waitFor(() => expect(harness.api.workspaceFiles.listDirectory).toHaveBeenCalled());
+    vi.mocked(harness.api.workspaceFiles.listDirectory).mockResolvedValue([
+      { name: "f5.md", relativePath: "f5.md", kind: "file", extension: "md", executable: false, mtimeMs: 0 },
+    ]);
+    const event = new KeyboardEvent("keydown", { key: "F5", bubbles: true, cancelable: true });
+    fireEvent(window, event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(await screen.findByText("f5.md")).toBeInTheDocument();
+    expect(harness.api.terminals.refresh).not.toHaveBeenCalled();
+    expect(harness.api.window.reload).not.toHaveBeenCalled();
   });
 
   it("Ctrl+1이 (두 번째가 아니라) 첫 번째 슬롯의 세션을 포커스한다", async () => {

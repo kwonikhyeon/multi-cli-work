@@ -110,6 +110,7 @@ export function buildTitleBarMenus(
         ),
         separator,
         item("view.quick-open", "빠른 열기", { shortcut: shortcutFor("view.quick-open") }),
+        item("file.refresh", "파일 목록 새로고침", { shortcut: shortcutFor("file.refresh") }),
         separator,
         item("view.zoom-in", "확대", { shortcut: shortcutFor("view.zoom-in") }),
         item("view.zoom-out", "축소", { shortcut: shortcutFor("view.zoom-out") }),

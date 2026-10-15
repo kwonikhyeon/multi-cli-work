@@ -24,7 +24,7 @@ export const EMPTY_CHANGE_OVERLAY: FileTreeChangeOverlay = {
 
 /**
  * `local` (non-agent) status only ever comes from directories the tree has already loaded — the tree
- * is lazy and this deliberately does not add polling to change that (see the plan's "알려진 한계").
+ * is lazy; manual refresh updates visible directories, without scanning collapsed subtrees.
  * Agent status comes from the main-process edit index instead, so it is not subject to that limit.
  */
 export function buildChangeOverlay(

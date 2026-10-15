@@ -59,7 +59,8 @@ describe("키맵 카탈로그", () => {
     expect(byId.get("view.quick-open")?.defaultAccelerator).toBe("Ctrl+P");
     expect(byId.get("file.save")?.defaultAccelerator).toBe("Ctrl+S");
     expect(byId.get("settings.open")?.defaultAccelerator).toBe("Ctrl+,");
-    expect(byId.get("session.refresh")?.defaultAccelerator).toBe("F5");
+    expect(byId.get("file.refresh")?.defaultAccelerator).toBe("F5");
+    expect(byId.get("session.refresh")?.defaultAccelerator).toBeNull();
     expect(byId.get("session.next")?.defaultAccelerator).toBe("Ctrl+Tab");
     expect(byId.get("session.prev")?.defaultAccelerator).toBe("Ctrl+Shift+Tab");
     expect(byId.get("workspace.focus-slot-1")?.defaultAccelerator).toBe("Ctrl+1");
@@ -76,7 +77,7 @@ describe("키맵 카탈로그", () => {
 
 describe("resolveKeymap / effectiveAccelerator / findConflict", () => {
   it("오버라이드가 기본값을 대체하고 null은 해제한다", () => {
-    const keymap = resolveKeymap({ "view.quick-open": "Ctrl+K", "session.refresh": null });
+    const keymap = resolveKeymap({ "view.quick-open": "Ctrl+K", "file.refresh": null });
     expect(keymap.get("Ctrl+K")?.id).toBe("view.quick-open");
     expect(keymap.get("Ctrl+P")).toBeUndefined();
     expect(keymap.get("F5")).toBeUndefined();

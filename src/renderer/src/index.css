@@ -2118,6 +2118,69 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
   overflow: auto;
 }
 
+.project-favorites {
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.project-favorites-list {
+  max-height: 180px;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-favorites .section-heading {
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.project-favorites-empty {
+  margin: 0;
+  padding: 2px 6px 4px;
+  color: var(--quiet);
+  font-size: var(--type-caption-size);
+  line-height: 1.5;
+}
+
+.favorite-project-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 29px;
+  min-height: 30px;
+  border-radius: 5px;
+}
+
+.favorite-project-row:hover,
+.favorite-project-row.selected {
+  background: var(--surface-hover);
+}
+
+.favorite-project-row.selected {
+  box-shadow: inset 2px 0 0 var(--teal);
+}
+
+.project-favorite-toggle {
+  align-self: center;
+  opacity: 0;
+}
+
+.project-row:hover .project-favorite-toggle,
+.project-row:focus-within .project-favorite-toggle,
+.project-favorite-toggle.is-favorite {
+  opacity: 1;
+}
+
+.project-favorite-toggle.is-favorite,
+.favorite-star {
+  color: var(--teal);
+}
+
+@media (hover: none) {
+  .project-favorite-toggle { opacity: 1; }
+}
+
 .section-heading {
   display: flex;
   align-items: center;
@@ -2527,14 +2590,12 @@ button.native-graph-ref:hover, button.native-graph-ref:focus-visible { border-co
  * violet/amber unread dot at the other edge, so activity and attention can be visible together.
  * Quiet folders use a neutral rail; a missing root overrides both with the error colour.
  */
-/* Two children live here: the 26px expand/collapse toggle, then the select button filling the
-   rest. A single-column template has no room for both, so it silently drops the second into an
-   implicit row below the first — the toggle alone on one line, the icon and name on the next. */
+/* Keep the folder name flexible between its expand toggle and favorite button. */
 .project-row {
   --folder-accent: var(--line-strong);
 
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr);
+  grid-template-columns: 26px minmax(0, 1fr) 29px;
   min-height: 30px;
   border-radius: 5px;
   box-shadow: inset 4px 0 0 var(--folder-accent);

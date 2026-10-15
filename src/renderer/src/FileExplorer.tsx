@@ -44,6 +44,14 @@ export interface FileExplorerProps {
 
 type DirectoryState = FileTreeEntry[] | "loading" | "error";
 
+function sameEntries(previous: DirectoryState | undefined, entries: FileTreeEntry[]): boolean {
+  return Array.isArray(previous) && previous.length === entries.length && previous.every((entry, index) => {
+    const next = entries[index];
+    return entry.relativePath === next.relativePath && entry.name === next.name && entry.kind === next.kind
+      && entry.extension === next.extension && entry.executable === next.executable && entry.mtimeMs === next.mtimeMs;
+  });
+}
+
 /** The one inline field the tree shows at a time — a new entry being named, or an old one renamed. */
 type EditingState =
   | { mode: "create"; parentRelativePath: string; kind: FileTreeEntry["kind"] }
@@ -341,6 +349,10 @@ export function FileExplorer({
   /** The file a single click selected; it outranks the open tab until another target is shown. */
   const [clicked, setClicked] = useState<{ targetKey: string; relativePath: string } | null>(null);
   const directoryRequestGenerations = useRef(new Map<string, number>());
+  const directoryCache = useRef(childrenByDir);
+  directoryCache.current = childrenByDir;
+  const gitRequestGeneration = useRef(0);
+  const changesRequestGeneration = useRef(0);
   const activeTargetKey = useRef(targetKey(target));
   const targetGeneration = useRef(0);
   const renderedTargetKey = targetKey(target);
@@ -361,26 +373,39 @@ export function FileExplorer({
     [changedPaths, childrenByDir, freshEdits.map],
   );
 
-  const loadDirectory = (loadTarget: FileExplorerTarget, relativePath: string) => {
+  const loadDirectory = async (loadTarget: FileExplorerTarget, relativePath: string, background = false): Promise<boolean> => {
     const loadTargetKey = targetKey(loadTarget);
     // A mutation may finish after its project/worktree is no longer selected. Reject it before it
     // can mark the current tree loading or advance the current target's directory generation.
-    if (activeTargetKey.current !== loadTargetKey) return;
+    if (activeTargetKey.current !== loadTargetKey) return false;
     const loadTargetGeneration = targetGeneration.current;
     const requestKey = relativePath;
     const generation = (directoryRequestGenerations.current.get(requestKey) ?? 0) + 1;
     directoryRequestGenerations.current.set(requestKey, generation);
-    setChildrenByDir((current) => ({ ...current, [relativePath]: "loading" }));
-    window.multiCliWork.workspaceFiles
-      .listDirectory(loadTarget, relativePath)
-      .then((entries) => {
-        if (activeTargetKey.current !== loadTargetKey || targetGeneration.current !== loadTargetGeneration || directoryRequestGenerations.current.get(requestKey) !== generation) return;
+    const isCurrent = () => activeTargetKey.current === loadTargetKey
+      && targetGeneration.current === loadTargetGeneration && directoryRequestGenerations.current.get(requestKey) === generation;
+    if (!background || !Array.isArray(directoryCache.current[relativePath])) {
+      setChildrenByDir((current) => ({ ...current, [relativePath]: "loading" }));
+    }
+    try {
+      const entries = await window.multiCliWork.workspaceFiles.listDirectory(loadTarget, relativePath);
+      if (!isCurrent()) return false;
+      const changed = !sameEntries(directoryCache.current[relativePath], entries);
+      if (changed || !background) {
+        directoryCache.current = { ...directoryCache.current, [relativePath]: entries };
         setChildrenByDir((current) => ({ ...current, [relativePath]: entries }));
-      })
-      .catch(() => {
-        if (activeTargetKey.current !== loadTargetKey || targetGeneration.current !== loadTargetGeneration || directoryRequestGenerations.current.get(requestKey) !== generation) return;
-        setChildrenByDir((current) => ({ ...current, [relativePath]: "error" }));
-      });
+      }
+      return changed;
+    } catch (error) {
+      if (isCurrent()) {
+        if (background && Array.isArray(directoryCache.current[relativePath])) {
+          setActionError(`파일 목록을 새로고침하지 못했습니다: ${errorMessage(error)}`);
+        } else {
+          setChildrenByDir((current) => ({ ...current, [relativePath]: "error" }));
+        }
+      }
+      return false;
+    }
   };
 
   /**
@@ -388,22 +413,32 @@ export function FileExplorer({
    * that is on screen, and a repository that cannot be read just leaves the tree unmarked.
    */
   const loadGit = (loadTarget: FileExplorerTarget) => {
-    window.multiCliWork.git
+    const owner = targetGeneration.current;
+    if (activeTargetKey.current !== targetKey(loadTarget)) return Promise.resolve();
+    const request = ++gitRequestGeneration.current;
+    const isCurrent = () => owner === targetGeneration.current && request === gitRequestGeneration.current;
+    return window.multiCliWork.git
       .panelData(loadTarget)
-      .then(setGitData)
-      .catch(() => setGitData(null));
+      .then((data) => { if (isCurrent()) setGitData(data); })
+      .catch(() => { if (isCurrent()) setGitData(null); });
   };
 
   /** Just the agent-edit index + baseline for this root — never a directory re-listing. */
   const loadChanges = (loadTarget: FileExplorerTarget) => {
-    window.multiCliWork.workspaceFiles
+    const owner = targetGeneration.current;
+    if (activeTargetKey.current !== targetKey(loadTarget)) return Promise.resolve();
+    const request = ++changesRequestGeneration.current;
+    const isCurrent = () => owner === targetGeneration.current && request === changesRequestGeneration.current;
+    return window.multiCliWork.workspaceFiles
       .changedPaths(loadTarget)
       .then((next) => {
+        if (!isCurrent()) return;
         for (const relativePath of freshAgentPaths(lastChangedPaths.current, next)) freshEdits.flash(relativePath, true);
         lastChangedPaths.current = next;
         setChangedPaths(next);
       })
       .catch(() => {
+        if (!isCurrent()) return;
         lastChangedPaths.current = null;
         setChangedPaths(null);
       });
@@ -420,6 +455,7 @@ export function FileExplorer({
   useEffect(() => {
     setExpandedDirs(new Set());
     setChildrenByDir({});
+    directoryCache.current = {};
     setGitData(null);
     setChangedPaths(null);
     lastChangedPaths.current = null;
@@ -441,36 +477,59 @@ export function FileExplorer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hidden]);
 
-  // The main process polls transcripts and tells every renderer window when it finds a new agent
-  // edit (App.tsx forwards `agent-edits` terminal events as this DOM event, mirroring GitPanel's
-  // mcw:git-refresh). No target/session filter travels with it, so just re-pull for whatever is open.
+  // Agent notifications update attribution only; directory reads remain user-triggered.
   useEffect(() => {
     if (!target || hidden) return;
-    const activeTarget = target;
-    const handler = () => loadChanges(activeTarget);
+    const handler = () => { void loadChanges(target); };
     window.addEventListener("mcw:agent-edits", handler);
     return () => window.removeEventListener("mcw:agent-edits", handler);
   }, [targetKey(target), hidden]);
 
+  const refresh = () => {
+    if (!target) return;
+    setActionError(null);
+    // Refresh visible directories in place; keep expansion, selection and inline drafts intact.
+    const visible = ["", ...[...expandedDirs].filter((dir) => {
+      const siblings = directoryCache.current[parentRelativePathOf(dir)];
+      if (!Array.isArray(siblings) || !siblings.some((entry) => entry.relativePath === dir && entry.kind === "directory")) return false;
+      for (let parent = parentRelativePathOf(dir); parent; parent = parentRelativePathOf(parent)) {
+        if (!expandedDirs.has(parent)) return false;
+        const ancestors = directoryCache.current[parentRelativePathOf(parent)];
+        if (!Array.isArray(ancestors) || !ancestors.some((entry) => entry.relativePath === parent && entry.kind === "directory")) return false;
+      }
+      return true;
+    })];
+    for (const dir of visible) void loadDirectory(target, dir, true);
+    void loadGit(target);
+    void loadChanges(target);
+  };
+
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  useEffect(() => {
+    const handler = () => refreshRef.current();
+    window.addEventListener("mcw:files-refresh", handler);
+    return () => window.removeEventListener("mcw:files-refresh", handler);
+  }, []);
+
   const toggleDir = (relativePath: string) => {
     if (!target) return;
+    const owner = targetGeneration.current;
     setExpandedDirs((current) => {
       const next = new Set(current);
       if (next.has(relativePath)) {
         next.delete(relativePath);
       } else {
         next.add(relativePath);
-        if (!childrenByDir[relativePath]) loadDirectory(target, relativePath);
+        void loadDirectory(target, relativePath, true).then((changed) => {
+          if (changed && targetGeneration.current === owner) {
+            void loadGit(target);
+            void loadChanges(target);
+          }
+        });
       }
       return next;
     });
-  };
-
-  const refresh = () => {
-    if (!target) return;
-    setChildrenByDir({});
-    setExpandedDirs(new Set());
-    loadTree(target);
   };
 
   /** "변경 표시 지우기" — resets this root's highlights. Nothing here was ever written to disk. */

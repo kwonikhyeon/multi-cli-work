@@ -283,17 +283,50 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
     await fs.rm(tempRoot, { recursive: true, force: true });
   });
 
+  test("refreshes files with F5 and persists favorite folder shortcuts", async () => {
+    await openFolder();
+    await page.getByRole("tab", { name: "파일", exact: true }).click();
+    const tree = page.getByRole("tree", { name: "파일 탐색기" });
+    await expect(tree.getByText("readme.md", { exact: true })).toBeVisible();
+
+    const liveDir = path.join(tempRoot, "sample-project", "live-refresh");
+    await fs.mkdir(liveDir);
+    await fs.writeFile(path.join(liveDir, "before.md"), "created externally\n");
+    await page.keyboard.press("F5");
+    await tree.getByRole("button", { name: "live-refresh", exact: true }).click();
+    await expect(tree.getByText("before.md", { exact: true })).toBeVisible();
+    await fs.rename(path.join(liveDir, "before.md"), path.join(liveDir, "after.md"));
+    await page.keyboard.press("F5");
+    await expect(tree.getByText("after.md", { exact: true })).toBeVisible();
+    await expect(tree.getByText("before.md", { exact: true })).toHaveCount(0);
+    await fs.unlink(path.join(liveDir, "after.md"));
+    await page.keyboard.press("F5");
+    await expect(tree.getByText("after.md", { exact: true })).toHaveCount(0);
+    await fs.rmdir(liveDir);
+    await page.keyboard.press("F5");
+    await expect(tree.getByRole("button", { name: "live-refresh", exact: true })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Sample Project 즐겨찾기 추가" }).click();
+    await page.reload();
+    const favorite = page.getByRole("button", { name: "Sample Project 즐겨찾기 열기" });
+    await expect(favorite).toBeVisible();
+    await page.getByRole("button", { name: "홈 대시보드 열기" }).click();
+    await favorite.click();
+    await expect(page.locator(".workspace-title")).toContainText("Sample Project");
+    await attachScreenshot("sidebar-favorites-and-f5-files");
+    await page.getByRole("region", { name: "즐겨찾기" }).getByRole("button", { name: "Sample Project 즐겨찾기 해제" }).click();
+    await expect(favorite).toHaveCount(0);
+  });
+
   test("@smoke runs a real native PTY and remains framed at both supported window sizes", async () => {
     await expect(page.getByRole("heading", { name: "멀티 터미널 작업기" })).toBeVisible();
 
-    // The row has two children again — the expand/collapse toggle and the select button — now that
-    // folders can show sessions and worktrees beneath them. A single-column parent grid has no room
-    // for both on one line, so it silently stacks them into two implicit rows: the chevron alone on
-    // top, the icon and name below it, doubling the row's height and reading as a wrapped name.
+    // Expansion, folder selection and favorite controls must stay on the same row.
     const folderRowLayout = await page.locator(".project-row").first().evaluate((row) => {
       const rowBounds = row.getBoundingClientRect();
       const toggleBounds = row.querySelector<HTMLElement>(".tree-toggle")?.getBoundingClientRect();
       const selectBounds = row.querySelector<HTMLElement>(".project-select")?.getBoundingClientRect();
+      const favoriteBounds = row.querySelector<HTMLElement>(".project-favorite-toggle")?.getBoundingClientRect();
       const iconBounds = row.querySelector<SVGElement>(".project-select > svg")?.getBoundingClientRect();
       return {
         rowHeight: rowBounds.height,
@@ -301,16 +334,19 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
         selectTop: selectBounds?.top ?? -2,
         toggleWidth: toggleBounds?.width ?? 0,
         selectWidth: selectBounds?.width ?? 0,
+        favoriteWidth: favoriteBounds?.width ?? 0,
+        favoriteTop: favoriteBounds?.top ?? -3,
         rowWidth: rowBounds.width,
         iconInset: (iconBounds?.left ?? rowBounds.left) - rowBounds.left,
       };
     });
     // Same row: the toggle and the select button share one top edge, not two stacked rows.
     expect(Math.abs(folderRowLayout.toggleTop - folderRowLayout.selectTop)).toBeLessThanOrEqual(1);
+    expect(Math.abs(folderRowLayout.favoriteTop - folderRowLayout.selectTop)).toBeLessThanOrEqual(1);
     expect(folderRowLayout.rowHeight).toBeLessThanOrEqual(32);
-    // Nothing between them is unaccounted for: the select button fills whatever the toggle leaves.
+    // The folder name fills the space between the two fixed-size controls.
     expect(folderRowLayout.selectWidth).toBeGreaterThanOrEqual(
-      folderRowLayout.rowWidth - folderRowLayout.toggleWidth - 1,
+      folderRowLayout.rowWidth - folderRowLayout.toggleWidth - folderRowLayout.favoriteWidth - 1,
     );
     // The 4px activity rail belongs at the row's edge; the folder icon must not sit on top of it.
     expect(folderRowLayout.iconInset).toBeGreaterThanOrEqual(8);
@@ -366,6 +402,18 @@ else { process.stderr.write("unsupported fake gh command: " + args.join(" ")); p
     await page.keyboard.type(shellCommand("Write-Output MCW_PTY_READY", "echo MCW_PTY_READY"));
     await page.keyboard.press("Enter");
     await expect(page.locator(".xterm-rows")).toContainText("MCW_PTY_READY");
+
+    // The global F5 shortcut must reach the file tree even while xterm owns keyboard focus.
+    await page.getByRole("tab", { name: "파일", exact: true }).click();
+    const refreshFile = path.join(tempRoot, "sample-project", "f5-terminal.md");
+    await fs.writeFile(refreshFile, "refresh from terminal focus\n");
+    await terminal.click();
+    await page.keyboard.press("F5");
+    await expect(page.getByRole("tree", { name: "파일 탐색기" }).getByText("f5-terminal.md")).toBeVisible();
+    await expect(page.locator(".xterm-rows")).toContainText("MCW_PTY_READY");
+    await fs.unlink(refreshFile);
+    await page.keyboard.press("F5");
+    await expect(page.getByRole("tree", { name: "파일 탐색기" }).getByText("f5-terminal.md")).toHaveCount(0);
 
     // A progress report (ConEmu OSC 9;4) from the session fills the line under its pane header, and
     // the line goes when the session clears it.

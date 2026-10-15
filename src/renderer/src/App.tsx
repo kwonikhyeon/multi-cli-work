@@ -1946,6 +1946,7 @@ export function App() {
       case "file.add-folder": void addProject(); break;
       case "file.add-work-project": createWorkProject(); break;
       case "file.save": if (selectedFileTab) void saveFileTab(selectedFileTab.id); break;
+      case "file.refresh": window.dispatchEvent(new Event("mcw:files-refresh")); break;
       case "file.relink": relinkSelectedProject(); break;
       // Not window.close(): ✕ hides to the tray, 종료 goes through the session-stop confirmation.
       case "file.quit": void window.multiCliWork.window.quit(); break;
