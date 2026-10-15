@@ -190,6 +190,7 @@ beforeEach(() => {
     },
   );
   window.multiCliWork = {
+    platform: "win32",
     shell: { openExternal: vi.fn().mockResolvedValue(undefined) },
     clipboard: { readText: vi.fn(), writeText: vi.fn() },
     files: { pathFor: vi.fn() },
@@ -320,6 +321,46 @@ describe("TerminalPane replay sizing", () => {
     await waitFor(() => expect(window.multiCliWork.terminals.attach).toHaveBeenCalled());
     expect(window.multiCliWork.terminals.resize).not.toHaveBeenCalled();
     expect(terminalHarness.events).toContain("write:200x50:REPLAY");
+  });
+});
+
+describe("TerminalPane darwin key handling", () => {
+  const keyEvent = (overrides: Partial<KeyboardEvent>) =>
+    ({
+      type: "keydown",
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: false,
+      metaKey: false,
+      preventDefault: vi.fn(),
+      ...overrides,
+    }) as unknown as KeyboardEvent;
+
+  it("darwin에서는 Cmd+F가 찾기를 열고 Ctrl+F·Ctrl+C·Ctrl+V는 가로채지 않고 PTY로 흘러간다", () => {
+    window.multiCliWork.platform = "darwin";
+    renderPane();
+
+    let result = true;
+    act(() => {
+      result = terminalHarness.keyHandler!(keyEvent({ code: "KeyF", key: "f", metaKey: true }));
+    });
+    expect(result).toBe(false); // 가로챔: 찾기 막대가 열린다
+    expect(screen.getByRole("search", { name: "터미널에서 찾기" })).toBeInTheDocument();
+
+    act(() => {
+      result = terminalHarness.keyHandler!(keyEvent({ code: "KeyF", key: "f", ctrlKey: true }));
+    });
+    expect(result).toBe(true); // Ctrl+F는 PTY로
+
+    act(() => {
+      result = terminalHarness.keyHandler!(keyEvent({ code: "KeyC", key: "c", ctrlKey: true }));
+    });
+    expect(result).toBe(true); // Ctrl+C(SIGINT) 보존
+
+    act(() => {
+      result = terminalHarness.keyHandler!(keyEvent({ code: "KeyV", key: "v", ctrlKey: true }));
+    });
+    expect(result).toBe(true); // Ctrl+V(quoted-insert)도 PTY로
   });
 });
 

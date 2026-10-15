@@ -196,14 +196,15 @@ export function TerminalPane({
     };
 
     terminal.attachCustomKeyEventHandler((event) => {
-      // Ctrl+F opens the pane's find bar, as in an editor's terminal. It never reaches the PTY: a
-      // TUI that wants it (readline's forward-char) still has the arrow key.
+      const isMac = window.multiCliWork.platform === "darwin";
+      // Ctrl+F(윈도우·리눅스) / Cmd+F(macOS)가 창의 찾기 막대를 연다. 에디터의 터미널처럼, 이 키는
+      // PTY에 전달되지 않는다. TUI가 원하는 forward-char는 방향키로 여전히 쓸 수 있다.
+      const findModifier = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
       if (
         (event.code === "KeyF" || event.key === "f" || event.key === "F") &&
-        event.ctrlKey &&
+        findModifier &&
         !event.shiftKey &&
-        !event.altKey &&
-        !event.metaKey
+        !event.altKey
       ) {
         event.preventDefault();
         if (event.type === "keydown") openSearch();
@@ -220,6 +221,9 @@ export function TerminalPane({
         }
         return false;
       }
+      // macOS 복사/붙여넣기는 Cmd+C/V — 브라우저 copy/paste 이벤트로 xterm이 처리한다.
+      // Ctrl+C(인터럽트)·Ctrl+V(quoted-insert)는 그대로 PTY에 준다.
+      if (isMac) return true;
       if (!event.ctrlKey || event.altKey) return true;
       const key = event.code || event.key;
       if (key !== "KeyC" && key !== "KeyV") return true;
