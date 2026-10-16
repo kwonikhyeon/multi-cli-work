@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from "vitest";
-import { QuitCoordinator, requestQuitFromBeforeQuit } from "./quit-coordinator";
+import { QuitCoordinator, requestQuitFromNativeEvent } from "./quit-coordinator";
 
 describe("QuitCoordinator", () => {
   it("shares concurrent quit/update requests and awaits disposal exactly once", async () => {
@@ -65,12 +65,12 @@ function instantQuitRequest() {
 /** setImmediate는 마이크로태스크 큐가 빈 뒤에 돈다 — 지금 태스크에서 이어지는 일을 모두 끝낸다. */
 const finishCurrentTask = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-describe("requestQuitFromBeforeQuit", () => {
-  it("defers on macOS so app.quit() never runs inside the native Quit() that fired before-quit", async () => {
+describe("requestQuitFromNativeEvent", () => {
+  it("defers on macOS so app.quit() never runs inside the native Quit() or close that fired the event", async () => {
     const { exit, requestQuit } = instantQuitRequest();
     const deferred: Array<() => void> = [];
 
-    requestQuitFromBeforeQuit("darwin", requestQuit, (task) => deferred.push(task));
+    requestQuitFromNativeEvent("darwin", requestQuit, (task) => deferred.push(task));
     await finishCurrentTask();
     expect(exit).not.toHaveBeenCalled();
 
@@ -83,7 +83,7 @@ describe("requestQuitFromBeforeQuit", () => {
     const { exit, requestQuit } = instantQuitRequest();
     const defer = vi.fn();
 
-    requestQuitFromBeforeQuit(platform, requestQuit, defer);
+    requestQuitFromNativeEvent(platform, requestQuit, defer);
     await finishCurrentTask();
 
     expect(defer).not.toHaveBeenCalled();

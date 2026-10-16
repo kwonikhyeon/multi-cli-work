@@ -8,7 +8,7 @@ import { APP_WINDOW_TITLE, applyWindowAttention } from "./window-attention";
 import { dockBadgeText, taskbarBadgeSpec, trayTooltip } from "./window-badge";
 import type { AttentionSnapshot } from "./attention-policy";
 import type { WindowChromeState } from "../shared/api-types";
-import { QuitCoordinator, requestQuitFromBeforeQuit } from "./quit-coordinator";
+import { QuitCoordinator, requestQuitFromNativeEvent } from "./quit-coordinator";
 import { windowChromeOptions } from "./window-chrome";
 import {
   rendererTargetNavigationUrl,
@@ -69,7 +69,7 @@ function createWindow(): BrowserWindow {
     event.preventDefault();
     const closeToTray = runtime?.settings.current().general.closeToTray ?? true;
     if (trayUnavailable || !closeToTray) {
-      void requestQuit();
+      requestQuitFromNativeEvent(process.platform, () => void requestQuit());
       return;
     }
     window.hide();
@@ -296,7 +296,7 @@ if (!hasSingleInstanceLock) {
   app.on("before-quit", (event) => {
     if (!runtime || quitCoordinator.isCommitted()) return;
     event.preventDefault();
-    requestQuitFromBeforeQuit(process.platform, () => void requestQuit());
+    requestQuitFromNativeEvent(process.platform, () => void requestQuit());
   });
 
   app.on("window-all-closed", () => {
