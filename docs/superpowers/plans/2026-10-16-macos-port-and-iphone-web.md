@@ -1067,24 +1067,53 @@ git commit -m "test: run the e2e smoke suite on macOS"
 
 **준비:** `npm run dist:mac`으로 만든 `release/Multi-CLI-Work-1.48.0-mac-arm64.dmg` (Task 11에서 생성됨).
 
-- [ ] **Step 1: 설치와 첫 실행** (Task 11 Step 4) — dmg를 열어 `/Applications`로 복사 → 더블클릭으로 실행. 로컬에서 빌드한 dmg는 격리 속성(`com.apple.quarantine`)이 붙지 않아 Gatekeeper 확인 없이 열린다(내려받은 사본이라면 macOS 15+에는 우클릭-열기 우회가 없으니 차단 뒤 시스템 설정 ▸ 개인정보 보호 및 보안 ▸ "그래도 열기"). **`npm run dev` 인스턴스가 떠 있으면 패키징본은 같은 userData의 singleton lock에 막혀 대화상자 없이 종료된다** — dev를 끄거나 `MULTI_CLI_WORK_USER_DATA`로 dev의 userData를 분리한다. 기동 직후 **GPU 크래시가 재발하지 않는지** 함께 본다(Task 1에서 1회 발생 후 무해로 판단한 건).
-- [ ] **Step 2: zsh 세션** (Task 4, Task 11 Step 4) — 새 세션 런처에 **zsh**가 보이고 그것으로 세션을 만들면 `echo $SHELL`이 zsh로 응답하는지. 입출력·종료가 정상인지(패키징본에서 `spawn-helper`가 실제로 실행되는지를 확인하는 유일한 경로 — 자동 검증은 파일 존재와 실행 비트까지만 했다).
+**자동 검증(2026-10-16):** 설치본(`/Applications/Multi CLI Work.app`, CDHash `7bec6bc9…` — `release/mac-arm64` 산출물과 동일)을 격리 userData(`MULTI_CLI_WORK_USER_DATA`)로 `open -n` 기동해 3회 실행했다. 렌더러는 CDP(`--remote-debugging-port`), 메인은 Node inspector(`--inspect`)로 조작·관측했고, 대화상자·진행률·앱 수명 이벤트는 메인 프로세스 프로브로 기록했다. macOS 권한(TCC) 창을 띄우는 조작(실제 키 입력 합성, 화면 캡처, 알림)과 사용자 클립보드는 건드리지 않았다. 그래서 그런 항목만 아래 **남은 수동**으로 남았다. `[x]`는 자동 확인으로 끝난 단계다.
+
+- [x] **Step 1: 설치와 첫 실행** (Task 11 Step 4) — dmg를 열어 `/Applications`로 복사 → 더블클릭으로 실행. 로컬에서 빌드한 dmg는 격리 속성(`com.apple.quarantine`)이 붙지 않아 Gatekeeper 확인 없이 열린다(내려받은 사본이라면 macOS 15+에는 우클릭-열기 우회가 없으니 차단 뒤 시스템 설정 ▸ 개인정보 보호 및 보안 ▸ "그래도 열기"). **`npm run dev` 인스턴스가 떠 있으면 패키징본은 같은 userData의 singleton lock에 막혀 대화상자 없이 종료된다** — dev를 끄거나 `MULTI_CLI_WORK_USER_DATA`로 dev의 userData를 분리한다. 기동 직후 **GPU 크래시가 재발하지 않는지** 함께 본다(Task 1에서 1회 발생 후 무해로 판단한 건).
+  - **결과(자동):** `open`(Finder 더블클릭과 같은 LaunchServices 경로)으로 3회 기동. 1.48.0 · Electron 43.2.0 · arm64 패키징본, 창 "멀티 터미널 작업기" 표시, helper 4종(gpu·network·NodeService·renderer) 정상. 실행 내내 GPU 프로세스 pid가 그대로였고 크래시 리포트 0건·GPU 오류 로그 0줄, 종료 뒤 잔존 프로세스 0.
+- [x] **Step 2: zsh 세션** (Task 4, Task 11 Step 4) — 새 세션 런처에 **zsh**가 보이고 그것으로 세션을 만들면 `echo $SHELL`이 zsh로 응답하는지. 입출력·종료가 정상인지(패키징본에서 `spawn-helper`가 실제로 실행되는지를 확인하는 유일한 경로 — 자동 검증은 파일 존재와 실행 비트까지만 했다).
+  - **결과(자동):** 런처 에이전트 `zsh·bash·claude·codex`, 새 세션 런처와 빠른 열기에 "새 zsh 세션" 표시. 그 세션에서 `$SHELL=/bin/zsh`, `ZSH_VERSION=5.9`. 프로세스는 `/bin/zsh --login`이고 부모는 node-pty가 도는 NodeService 유틸리티 프로세스다 — 패키징본에서 `spawn-helper`를 거친 PTY 생성이 실제로 성공했다. 입출력 정상, `exit` → 종료 이벤트 `exitCode 0`.
 - [ ] **Step 3: 트레이 상주와 복귀** (Task 9, 10, 11 Step 4) — 창을 닫아 메뉴바 트레이로 내려간 뒤 ① 트레이 아이콘으로 복귀, ② **Dock 아이콘 클릭으로 복귀**(`app.on("activate")` 경로) 둘 다 확인. macOS 트레이는 단일 클릭이 컨텍스트 메뉴를 열어 `double-click` 이벤트가 오지 않을 수 있는데, 컨텍스트 메뉴의 "멀티 터미널 작업기 표시"와 Dock 복귀가 있으므로 기능 손실은 아니다 — 실제로 어느 경로가 동작하는지 기록한다.
+  - **자동 확인:** 창 닫기 → 창은 파괴되지 않고 숨겨짐(트레이 있음, 인스턴스 1개 유지). 실행 중인 앱에 `open -a`(Dock 클릭과 같은 reopen Apple Event) → `activate` 발생 → 창 다시 표시. ② Dock 복귀 경로 확인.
+  - **남은 수동:** ① 메뉴바 트레이 아이콘 — 클릭하면 컨텍스트 메뉴가 열리는지, 더블클릭으로 복귀되는지, 메뉴 "멀티 터미널 작업기 표시"로 복귀되는지. 실제로 동작한 경로를 적는다.
 - [ ] **Step 4: 메뉴바와 Cmd+Q** (Task 9) — 메뉴바에 앱 메뉴(앱·편집·창 3개)가 보이는지. 세션 하나를 띄운 채 **Cmd+Q**로 종료 → 재시작했을 때 중단 세션 복원 안내가 뜨는지. **세션이 하나도 없을 때도** Cmd+Q 한 번에 앱이 끝나는지 — Dock 아이콘 아래 점과 메뉴바 트레이 아이콘이 사라져야 한다(창만 닫히고 앱이 남으면 before-quit 재진입 회귀다. 세션이 있으면 확인 대화상자가 끼어 이 경로를 타지 않는다).
+  - **자동 확인:** 메뉴바 메뉴 3개(앱·Edit·Window). 앱 메뉴 = About·Services·Hide(⌘H)·Hide Others(⌥⌘H)·Show All·Quit(⌘Q), Edit = Undo~Select All, Window = Minimize(⌘M)·Zoom·Bring All to Front. 종료는 Cmd+Q와 같은 네이티브 `Browser::Quit()`로 들어가는 SIGTERM으로 쟀다. 세션 1개가 돌면 확인 대화상자가 호출되고("멀티 터미널 작업기 종료" / "종료하고 실행 중인 모든 세션을 중지할까요?" / 취소·종료), 프로브가 "종료"로 응답하면 `before-quit`·`will-quit`·`quit` 순서로 약 200ms에 끝나고 세션 셸까지 잔존 프로세스 0. 재시작하면 그 세션이 재개된다(재개 구분선 + 이전 스크롤백 + 새 셸). 세션이 없으면 대화상자 없이 약 200ms에 한 번에 끝난다(`72c5fa6` 확인).
+  - **남은 수동:** 실제 키보드 **Cmd+Q**(메뉴 단축키 경로)로 두 경우를 한 번씩 — 특히 세션이 없을 때 한 번에 Dock 점과 트레이 아이콘이 사라지는지.
+  - **발견 F1:** 앱 메뉴 항목이 "About multi-cli-work"·"Hide multi-cli-work"·"Quit multi-cli-work"로 나온다. Electron 역할 라벨이 `app.name`(= package.json `name`)을 쓰기 때문이다(메뉴바의 굵은 앱 이름은 Electron 문서상 번들 이름 "Multi CLI Work" — 육안 확인 대상). `app.name`은 userData 경로와 Keychain 항목 이름("multi-cli-work Safe Storage")을 정하므로 바꾸면 안 된다. 고치려면 darwin 앱 메뉴의 항목 라벨을 명시해야 한다 — 사용자 결정 대기.
 - [ ] **Step 5: Cmd 단축키** (Task 5, 6, 7, 9, 12) — ① 리매핑된 Cmd 조합 앱 단축키가 실제로 동작하는지, ② **터미널에서 Cmd+C / Cmd+V**(Task 9의 `editMenu` role이 들어온 뒤 재검), ③ 입력창에서 Cmd+C / Cmd+V, ④ **원격 창에서 Cmd+C / Cmd+V**, ⑤ 설정과 타이틀바 메뉴의 단축키 라벨이 ⌘·⌥·⇧ 기호로 보이는지.
 
   ②는 **이 수동 검증이 유일한 커버리지다.** `TerminalPane`은 darwin에서 자체 Ctrl+C/V 처리를 건너뛰고(`if (isMac) return true;`) 네이티브 클립보드 이벤트에 맡긴다. `desktop.spec.ts:538`의 클립보드 테스트는 `Ctrl+V`와 `Ctrl+Shift+V` **두 개**의 붙여넣기 단축키가 각각 "정확히 한 번" 먹는지를 단정하는데(`:558`·`:571`) darwin에는 조작당 클립보드 키가 Cmd+V 하나뿐이라 1:1 대응이 없다 — Task 12가 고치지 못하고 기록만 남긴 유일한 항목이다. 어긋나면 테스트 전략 자체를 바꿔야 하므로 결과를 구체적으로 적는다.
 
   ④는 반대로 **Task 12가 자동 커버리지를 확보했다.** 원격 창은 `TerminalPane`이 아니라 `src/renderer/src/mobile/terminal-input.ts`의 `clipboardKeyAction`을 타는데 거기에 darwin 분기가 없어 Ctrl+C가 SIGINT를 삼키고 Ctrl+V가 죽어 있었다. Task 12가 `isApplePlatform`으로 분기를 넣고 `remote-window.spec.ts`를 darwin에서 `Meta+V`·`Meta+C`로 돌려 통과시켰다. 이 항목은 회귀 확인이다.
+
+  - **자동 확인:** ① CDP 키 입력으로 ⌘, → 설정 열림, ⌃, → 반응 없음(Cmd로 리매핑됨), ⌘P → 빠른 열기 + 검색창 포커스. ⑤ 타이틀바 메뉴 라벨 — 파일 ⌘S / 편집 ⌘C·⌘V·⌘A·⌘F / 보기 ⌘P·F5·⌘=·⌘-·⌘0·⌃⌘F·⌥⌘I, 설정 › 단축키 31개 모두 기호 표기(단어 라벨 0). ④는 위 설명대로 Task 12의 `remote-window.spec.ts`가 커버한다.
+  - **남은 수동:** ② 터미널에서 Cmd+C / Cmd+V, ③ 입력창에서 Cmd+C / Cmd+V. 실제 클립보드를 써야 해서 자동화하지 않았다(사용자 클립보드를 덮어쓴다). ① 실제 키보드로 ⌘P 한 번(선택).
+  - **발견 F3:** 수식키는 기호인데 키 이름은 단어로 남는다 — `⌥⌘ArrowLeft`, `⇧⌘Enter`, `⌃PageUp`(macOS 관례는 `⌥⌘←`, `⇧⌘↩`, `⌃⇞`). `acceleratorLabel`이 수식키만 바꾼다. 기능 영향 없는 다듬기 후보.
 - [ ] **Step 6: 아이콘 시각 확인** (Task 10, 11) — ① 메뉴바의 `>_` 템플릿 글리프가 **라이트/다크 모드 양쪽에서** 또렷한지(시스템 설정 ▸ 모양새로 전환), ② `build/icon-mac.png`는 256×256을 1024로 업스케일한 것이므로 **Dock·Finder 큰 아이콘의 선명도**를 확인하고, 뭉개지면 고해상도 원본으로 교체한다.
+  - **자동 확인:** 없음(시각 항목). 참고로 아이콘은 여백 없이 캔버스를 꽉 채운 둥근 사각형이다.
+  - **남은 수동:** ① 메뉴바 `>_` 글리프가 라이트/다크 양쪽에서 또렷한지, ② Dock·Finder 큰 아이콘의 선명도.
+  - **발견 F4(확인 필요):** 여백이 없어 Dock에서 다른 앱 아이콘보다 커 보이거나, macOS 26에서 회색 틀 안에 줄어든 채 보일 수 있다. 어색하면 Apple 아이콘 그리드(1024 캔버스에 824 본체)에 맞춘 고해상도 원본으로 교체한다.
 - [ ] **Step 7: 업데이트 안내와 알림** (Task 8, 11 Step 4) — ① 업데이트 배지가 자동 다운로드가 아니라 `수동 업데이트`+`릴리스` 안내로 뜨는지, ② 세션을 입력 대기로 만들어 **데스크톱 알림**이 오는지(첫 알림에서 OS 권한을 허용해야 하고, 안 오면 시스템 설정 ▸ 알림에서 앱 상태를 확인).
+  - **자동 확인:** ① `updates.status()` = `{state: "manual"}`, 하단에 "v1.48.0 수동 업데이트 | 릴리스" 표시(자동 다운로드 없음).
+  - **남은 수동:** ② 세션을 입력 대기로 만들어 데스크톱 알림이 오는지. 첫 알림에서 OS 권한 허용이 필요하다(권한 창이 떠서 자동화하지 않았다).
 - [ ] **Step 8: 타이틀바 신호등 인셋** (Task 3) — `npm run dev`에서 네이티브 신호등 버튼과 앱이 그린 타이틀바 내용이 겹치지 않는지(`.title-bar-mac`의 `padding-left: 76px`).
-- [ ] **Step 9: `jk` 제어 CLI** — zsh 세션에서 `which jk` → userData의 `bin/jk`(패키징본은 `~/Library/Application Support/multi-cli-work/bin/jk`) 확인, `jk --help` 실행, `echo $JK_CODING_CLI_ENDPOINT $JK_CODING_CLI_TOKEN`이 세션 환경에 있는지 확인(POSIX 경로는 named pipe 대신 이 둘을 쓴다). 스크립트 **문법** 호환은 이미 확정됐으므로(아래 Step 10) 남은 것은 런타임 동작뿐이다.
-- [ ] **Step 10: Python3** — **자동 확인 완료**: `CONTROL_CLI_PYTHON`을 CLT 동봉 `/usr/bin/python3`(3.9.6)과 Homebrew(3.14.3) 양쪽에서 `py_compile`로 통과시켰다. 이 단계는 `python3 --version`이 응답하는지만 기록하면 끝이다(상태 훅 의존).
-- [ ] **Step 11: safeStorage** — 설정 › 노션에 아무 토큰이나 저장 → 앱 재시작 → 저장 상태 유지 확인(Keychain 암호화 경로) → 토큰 삭제.
+  - **자동 확인:** 패키징본 창이 `titleBarStyle: "hiddenInset"`으로 뜨고, `padding-left: 76px` 때문에 타이틀바 첫 콘텐츠가 x≈86px에서 시작한다. dev와 패키징본은 같은 창 옵션과 CSS를 쓰므로 패키징본에서 봐도 된다.
+  - **남은 수동:** 신호등 버튼과 타이틀바 내용이 겹치지 않는지, 세로 중심이 맞는지 육안 확인(네이티브 신호등은 웹 콘텐츠 캡처에 안 잡힌다).
+- [x] **Step 9: `jk` 제어 CLI** — zsh 세션에서 `which jk` → userData의 `bin/jk`(패키징본은 `~/Library/Application Support/multi-cli-work/bin/jk`) 확인, `jk --help` 실행, `echo $JK_CODING_CLI_ENDPOINT $JK_CODING_CLI_TOKEN`이 세션 환경에 있는지 확인(POSIX 경로는 named pipe 대신 이 둘을 쓴다). 스크립트 **문법** 호환은 이미 확정됐으므로(아래 Step 10) 남은 것은 런타임 동작뿐이다.
+  - **결과(자동):** zsh 세션에서 `which jk` → `<userData>/bin/jk`(이번엔 격리 userData라 그 아래; 기본 실행이면 위 경로), `jk --help` 종료코드 0 + 사용법 줄, `JK_CODING_CLI_ENDPOINT=tcp://127.0.0.1:<포트>`와 `JK_CODING_CLI_TOKEN`(값은 출력하지 않음) 존재, 세션 ID 환경변수 일치, `jk list`가 자기 세션을 보여준다. `jk progress`도 동작한다(Step 12).
+- [x] **Step 10: Python3** — **자동 확인 완료**: `CONTROL_CLI_PYTHON`을 CLT 동봉 `/usr/bin/python3`(3.9.6)과 Homebrew(3.14.3) 양쪽에서 `py_compile`로 통과시켰다. 이 단계는 `python3 --version`이 응답하는지만 기록하면 끝이다(상태 훅 의존).
+  - **결과(자동):** 세션에서 `python3 --version` → 3.14.3(`/opt/homebrew/bin/python3`).
+- [x] **Step 11: safeStorage** — 설정 › 노션에 아무 토큰이나 저장 → 앱 재시작 → 저장 상태 유지 확인(Keychain 암호화 경로) → 토큰 삭제.
+  - **플랜 문구 정정:** "아무 토큰이나 저장"은 할 수 없다 — `setToken`이 Notion API로 토큰을 검증한 뒤에만 저장한다. 같은 Keychain 암호화 경로를 직접 왕복하는 것으로 대신했다.
+  - **결과(자동):** `safeStorage.isEncryptionAvailable()` true → 문자열 암호화(35바이트) → 앱 재시작 뒤 같은 암호문 복호화 성공. 노션 상태 `{configured: false, encryptionAvailable: true}`. 이때 로그인 키체인에 "multi-cli-work Safe Storage" 항목이 생겼다. 서명(CDHash)이 바뀐 재빌드는 첫 접근 때 키체인 허용 창이 한 번 뜰 수 있다. 실제 노션 토큰의 저장·유지 확인은 토큰이 있을 때 선택.
 - [ ] **Step 12: 진행률** — 세션에서 `printf '\e]9;4;1;50\a'` 실행 → 패인 진행선과 Dock 아이콘 진행률 표시 확인, `printf '\e]9;4;0;0\a'`로 해제.
+  - **자동 확인:** `printf '\e]9;4;1;50\a'` → 세션 진행률 `normal 50`, 창 `setProgressBar(0.5, normal)`. `printf '\e]9;4;0;0\a'` → `setProgressBar(-1, none)`로 해제. `jk progress 30` → 0.3, `jk progress clear` → 해제.
+  - **남은 수동:** 패인 진행선과 Dock 아이콘 진행 막대가 실제로 그려지는지 육안 확인.
 - [ ] **Step 13: 전역 소환 단축키** — 설정 › 일반의 소환 단축키를 등록하고 창을 숨긴 뒤 복귀 확인. **Cmd 조합은 아직 선택할 수 없으므로**(Task 5의 보류 Minor — `SettingsDialog.tsx`의 캡처와 `ipc-validation.ts`의 검증이 Cmd를 받지 않는다) `Alt+Space`·`Ctrl+Alt+K`류로 확인한다.
-- [ ] **Step 14: Google Drive 루트** — 설정의 워크스페이스 루트에 아무 로컬 폴더를 수동 지정해 업무 프로젝트 스캔이 도는지 확인(darwin 자동 탐지는 범위 밖).
+  - **자동 확인:** 설정에서 `Ctrl+Alt+K` 저장 → 전역 단축키 등록 성공, 비우면 해제.
+  - **남은 수동:** 창을 숨긴 뒤 실제로 ⌃⌥K를 눌러 창이 돌아오는지. 전역 키 입력은 손쉬운 사용 권한 없이 합성할 수 없어 자동화하지 않았다.
+- [x] **Step 14: Google Drive 루트** — 설정의 워크스페이스 루트에 아무 로컬 폴더를 수동 지정해 업무 프로젝트 스캔이 도는지 확인(darwin 자동 탐지는 범위 밖).
+  - **결과(자동):** 임시 폴더를 워크스페이스 루트로 지정 → 스캔은 **`<대문자>_<이름>` 형식의 최상위 폴더만** 잡는다(`PREFIXED_NAME_PATTERN`). `A_알파-프로젝트`·`B_beta-project`·`Z_코드-미등록`은 잡고 `share`·`_archive`는 뺐다. 기본 범주에는 코드가 없어 범주는 미지정. `A_알파-프로젝트` 가져오기 → 업무 프로젝트 생성 + 문서 멤버 연결. 형식에 맞는 폴더가 없으면 0건이 정상이다.
 - [ ] **Step 15: 결과 기록** — 체크 결과를 이 플랜 파일의 각 체크박스에 채운다. 어긋난 항목은 해당 소스를 유닛 테스트와 함께 고쳐 **개별 커밋**하고, 그 뒤 체크리스트만 커밋한다:
 
 ```bash
@@ -1093,6 +1122,8 @@ git commit -m "chore: record macOS manual verification"
 ```
 
 (`git commit -am`을 쓰지 않는다 — 추적 중인 다른 수정 파일을 함께 쓸어 담는다.)
+
+**진행(2026-10-16):** 자동 확인분만 먼저 기록해 커밋했다. 위 **남은 수동** 항목이 끝나면 결과를 채워 Step 15를 마친다.
 
 ---
 
