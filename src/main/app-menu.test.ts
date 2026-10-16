@@ -17,7 +17,7 @@ describe("macApplicationMenuTemplate", () => {
     ]);
   });
 
-  it("keeps Electron's appMenu items in order so their actions and shortcuts stay native", () => {
+  it("keeps Electron 43.2.0's default appMenu items in order so their actions and shortcuts stay native", () => {
     expect(appMenu.role).toBe("appMenu");
     expect(appItems.map((item) => item.role ?? item.type)).toEqual([
       "about",

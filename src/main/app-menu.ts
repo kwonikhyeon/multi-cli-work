@@ -11,6 +11,9 @@ export const MAC_PRODUCT_NAME = "Multi CLI Work";
  * Cmd+Q/C/V/H/M and dictation to work, so this is Electron's appMenu/editMenu/windowMenu trio with
  * the appMenu items spelled out: the roles keep their native actions and shortcuts, and only the
  * items whose default label embeds `app.name` get a label.
+ * The spelled-out list copies Electron 43.2.0's default appMenu. The unit tests run without Electron
+ * and cannot compare against that default, so re-check it against Electron's menu-item-roles when
+ * upgrading Electron.
  */
 export function macApplicationMenuTemplate(): Electron.MenuItemConstructorOptions[] {
   return [
