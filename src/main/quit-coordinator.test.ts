@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from "vitest";
-import { QuitCoordinator } from "./quit-coordinator";
+import { QuitCoordinator, requestQuitFromBeforeQuit } from "./quit-coordinator";
 
 describe("QuitCoordinator", () => {
   it("shares concurrent quit/update requests and awaits disposal exactly once", async () => {
@@ -51,6 +51,42 @@ describe("QuitCoordinator", () => {
     await expect(coordinator.request({ confirm: async () => true, exit })).resolves.toBeUndefined();
 
     expect(dispose).toHaveBeenCalledTimes(2);
+    expect(exit).toHaveBeenCalledOnce();
+  });
+});
+
+/** 세션이 없을 때처럼 확인·정리가 곧바로 끝나는 종료 요청 — 마이크로태스크만으로 exit(app.quit)까지 간다. */
+function instantQuitRequest() {
+  const coordinator = new QuitCoordinator(async () => undefined);
+  const exit = vi.fn();
+  return { exit, requestQuit: () => void coordinator.request({ confirm: async () => true, exit }) };
+}
+
+/** setImmediate는 마이크로태스크 큐가 빈 뒤에 돈다 — 지금 태스크에서 이어지는 일을 모두 끝낸다. */
+const finishCurrentTask = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+describe("requestQuitFromBeforeQuit", () => {
+  it("defers on macOS so app.quit() never runs inside the native Quit() that fired before-quit", async () => {
+    const { exit, requestQuit } = instantQuitRequest();
+    const deferred: Array<() => void> = [];
+
+    requestQuitFromBeforeQuit("darwin", requestQuit, (task) => deferred.push(task));
+    await finishCurrentTask();
+    expect(exit).not.toHaveBeenCalled();
+
+    for (const task of deferred) task();
+    await finishCurrentTask();
+    expect(exit).toHaveBeenCalledOnce();
+  });
+
+  it.each(["win32", "linux"] as const)("requests at once on %s, as before", async (platform) => {
+    const { exit, requestQuit } = instantQuitRequest();
+    const defer = vi.fn();
+
+    requestQuitFromBeforeQuit(platform, requestQuit, defer);
+    await finishCurrentTask();
+
+    expect(defer).not.toHaveBeenCalled();
     expect(exit).toHaveBeenCalledOnce();
   });
 });

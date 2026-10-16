@@ -7,7 +7,7 @@ import { APP_WINDOW_TITLE, applyWindowAttention } from "./window-attention";
 import { dockBadgeText, taskbarBadgeSpec, trayTooltip } from "./window-badge";
 import type { AttentionSnapshot } from "./attention-policy";
 import type { WindowChromeState } from "../shared/api-types";
-import { QuitCoordinator } from "./quit-coordinator";
+import { QuitCoordinator, requestQuitFromBeforeQuit } from "./quit-coordinator";
 import { windowChromeOptions } from "./window-chrome";
 import {
   rendererTargetNavigationUrl,
@@ -298,7 +298,7 @@ if (!hasSingleInstanceLock) {
   app.on("before-quit", (event) => {
     if (!runtime || quitCoordinator.isCommitted()) return;
     event.preventDefault();
-    void requestQuit();
+    requestQuitFromBeforeQuit(process.platform, () => void requestQuit());
   });
 
   app.on("window-all-closed", () => {
