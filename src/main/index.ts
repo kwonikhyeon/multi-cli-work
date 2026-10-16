@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, nativeImage, Tray, dialog } from "electron";
 import path from "node:path";
+import { macApplicationMenuTemplate } from "./app-menu";
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime";
 import { trayIconDataUrl, trayTemplateBitmap } from "./tray-icon";
 import { checkForUpdates, initUpdater, quitAndInstall } from "./updater";
@@ -255,12 +256,9 @@ if (!hasSingleInstanceLock) {
   }
 
   void app.whenReady().then(async () => {
-    // The renderer draws its own menu bar. On macOS the system menu bar still has to exist for
-    // Cmd+Q/C/V/H/M and dictation to work, so a minimal role-only menu replaces null there.
+    // The renderer draws its own menu bar; macOS still needs a minimal system menu (see app-menu.ts).
     if (process.platform === "darwin") {
-      Menu.setApplicationMenu(
-        Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "windowMenu" }]),
-      );
+      Menu.setApplicationMenu(Menu.buildFromTemplate(macApplicationMenuTemplate()));
     } else {
       Menu.setApplicationMenu(null);
     }
