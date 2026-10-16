@@ -78,8 +78,8 @@ keymap이 단일 소스이고 리매핑을 지원하므로 **기본값만 플랫
 
 ### 3.8 패키징 — `package.json`
 
-- `dist:mac` 스크립트 추가: `electron-builder --mac dmg zip --arm64 --publish never`.
-- `build.mac`: `category: public.app-category.developer-tools`, `icon: build/icon.png`(electron-builder가 icns 변환), `identity: "-"`(ad-hoc — `null`은 서명을 건너뛰어 번들에 resource seal이 없다), `hardenedRuntime: false`(ad-hoc에서 켜 두면 library validation이 실행을 막는다), `artifactName: Multi-CLI-Work-${version}-mac-arm64.${ext}`.
+- `dist:mac` 스크립트 추가: `electron-builder --mac dmg zip --arm64 --publish never` 뒤에 서명을 확인한다 — `codesign --verify --deep --strict`가 통과하고 `codesign -dv`가 `Signature=adhoc`을 보고해야 성공이다. electron-builder는 `"-"`도 먼저 키체인에서 이름에 `-`가 든 인증서를 찾아 쓰므로, 그런 인증서가 생기면 ad-hoc 대신 그것으로 서명된다.
+- `build.mac`: `category: public.app-category.developer-tools`, `icon: build/icon-mac.png`(256px `build/icon.png`를 1024px로 키운 사본 — electron-builder의 icns 변환은 512px 미만이면 빌드를 멈춘다), `identity: "-"`(ad-hoc — `null`은 서명을 건너뛰어 번들에 resource seal이 없다), `hardenedRuntime: false`(hardened runtime은 공증에만 필요하다 — Phase 4까지 끈다), `artifactName: Multi-CLI-Work-${version}-mac-${arch}.${ext}`.
 - hardened runtime·entitlements·공증 설정은 Phase 4에서 추가한다.
 
 ### 3.9 테스트

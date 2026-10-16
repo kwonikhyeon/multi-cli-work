@@ -943,7 +943,7 @@ sips -z 1024 1024 build/icon.png --out build/icon-mac.png
 `scripts`의 `dist:linux:x64` 아래에:
 
 ```json
-    "dist:mac": "npm run build && electron-builder --mac dmg zip --arm64 --publish never",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --arm64 --publish never && codesign --verify --deep --strict --verbose=2 \"release/mac-arm64/Multi CLI Work.app\" && codesign -dv \"release/mac-arm64/Multi CLI Work.app\" 2>&1 | grep -x Signature=adhoc",
 ```
 
 `build`의 `"linux"` 블록 아래에(형제 키로):
@@ -962,12 +962,12 @@ sips -z 1024 1024 build/icon.png --out build/icon-mac.png
     },
 ```
 
-(zip 타깃은 Phase 4에서 자동 업데이트를 켤 때 필요하므로 지금부터 함께 만든다. `identity: "-"`가 ad-hoc 서명이다 — `null`은 서명을 통째로 건너뛰어 번들에 resource seal이 없고, 내려받은 사본은 "손상됨"으로 거부된다. ad-hoc에 기본값 `hardenedRuntime: true`를 쓰면 library validation이 앱 실행을 막으므로 끈다.)
+(zip 타깃은 Phase 4에서 자동 업데이트를 켤 때 필요하므로 지금부터 함께 만든다. `identity: "-"`가 ad-hoc 서명이다 — `null`은 서명을 통째로 건너뛰어 번들에 resource seal이 없고, 내려받은 사본은 "손상됨"으로 거부된다. hardened runtime은 공증에만 필요하므로 Phase 4까지 끈다(기본값은 `true`). 스크립트 끝의 두 `codesign`이 서명을 확인한다 — `--verify`는 번들 봉인을, `Signature=adhoc`은 실제로 ad-hoc 서명인지를 본다. electron-builder는 `"-"`도 먼저 키체인에서 이름에 `-`가 든 인증서를 찾아 쓰므로, 그런 인증서가 생기면 다른 서명이 조용히 들어간다.)
 
 - [ ] **Step 3: 빌드 실행**
 
 Run: `npm run dist:mac`
-Expected: `release/`에 `Multi-CLI-Work-1.48.0-mac-arm64.dmg`와 `.zip` 생성. `build/mobile`이 없다는 electron-builder 경고는 정상(로컬 dist는 셸 APK 미동봉 — 기존 win/linux와 동일).
+Expected: `release/`에 `Multi-CLI-Work-1.48.0-mac-arm64.dmg`와 `.zip` 생성. `build/mobile`이 없다는 electron-builder 경고는 정상(로컬 dist는 셸 APK 미동봉 — 기존 win/linux와 동일). 끝에 `valid on disk`, `satisfies its Designated Requirement`, `Signature=adhoc` 세 줄이 나오고 종료 코드가 0이다.
 
 - [ ] **Step 4: 설치본 수동 검증**
 
@@ -1077,6 +1077,7 @@ git commit -m "test: run the e2e smoke suite on macOS"
   - **자동 확인:** 창 닫기 → 창은 파괴되지 않고 숨겨짐(트레이 있음, 인스턴스 1개 유지). 실행 중인 앱에 `open -a`(Dock 클릭과 같은 reopen Apple Event) → `activate` 발생 → 창 다시 표시. ② Dock 복귀 경로 확인.
   - **사람 확인:** ① 메뉴바 트레이 아이콘 — 클릭하면 컨텍스트 메뉴가 열리는지, 더블클릭으로 복귀되는지, 메뉴 "멀티 터미널 작업기 표시"로 복귀되는지. 실제로 동작한 경로를 적는다.
   - **결과(사용자, 2026-10-16):** 정상. 트레이 아이콘에서 클릭·더블클릭·메뉴 중 어느 경로로 복귀했는지는 따로 적지 않았다.
+  - **리뷰 발견 F5:** 설정 › 일반 "창을 닫으면 트레이에 남기기"를 껐거나 트레이를 만들지 못했으면 창 닫기가 곧 종료다. 세션이 없을 때 신호등 닫기 버튼을 누르면 창만 닫히고 앱은 Dock에 남는다. Cmd+Q(`72c5fa6`)와 같은 재진입이다 — 네이티브 `windowShouldClose:` 안에서 `app.quit()`이 불리고, 막힌 close가 그 종료를 취소한다. → **수정 `c5f5a24`:** darwin에서는 창 닫기의 종료 요청도 다음 태스크로 미룬다. 실제 신호등 클릭은 macOS 권한 창 없이 재현할 수 없다(인스펙터로 낸 close는 JS 닫기처럼 돌아 문제가 드러나지 않는다). 그래서 새 빌드를 설치한 뒤 사람이 확인한다(아래 "새 빌드 설치 뒤 확인").
 - [x] **Step 4: 메뉴바와 Cmd+Q** (Task 9) — 메뉴바에 앱 메뉴(앱·편집·창 3개)가 보이는지. 세션 하나를 띄운 채 **Cmd+Q**로 종료 → 재시작했을 때 중단 세션 복원 안내가 뜨는지. **세션이 하나도 없을 때도** Cmd+Q 한 번에 앱이 끝나는지 — Dock 아이콘 아래 점과 메뉴바 트레이 아이콘이 사라져야 한다(창만 닫히고 앱이 남으면 before-quit 재진입 회귀다. 세션이 있으면 확인 대화상자가 끼어 이 경로를 타지 않는다).
   - **자동 확인:** 메뉴바 메뉴 3개(앱·Edit·Window). 앱 메뉴 = About·Services·Hide(⌘H)·Hide Others(⌥⌘H)·Show All·Quit(⌘Q), Edit = Undo~Select All, Window = Minimize(⌘M)·Zoom·Bring All to Front. 종료는 Cmd+Q와 같은 네이티브 `Browser::Quit()`로 들어가는 SIGTERM으로 쟀다. 세션 1개가 돌면 확인 대화상자가 호출되고("멀티 터미널 작업기 종료" / "종료하고 실행 중인 모든 세션을 중지할까요?" / 취소·종료), 프로브가 "종료"로 응답하면 `before-quit`·`will-quit`·`quit` 순서로 약 200ms에 끝나고 세션 셸까지 잔존 프로세스 0. 재시작하면 그 세션이 재개된다(재개 구분선 + 이전 스크롤백 + 새 셸). 세션이 없으면 대화상자 없이 약 200ms에 한 번에 끝난다(`72c5fa6` 확인).
   - **사람 확인:** 실제 키보드 **Cmd+Q**(메뉴 단축키 경로)로 두 경우를 한 번씩 — 특히 세션이 없을 때 한 번에 Dock 점과 트레이 아이콘이 사라지는지.
@@ -1132,6 +1133,11 @@ git commit -m "chore: record macOS manual verification"
 (`git commit -am`을 쓰지 않는다 — 추적 중인 다른 수정 파일을 함께 쓸어 담는다.)
 
 **완료(2026-10-16):** 자동 확인분은 `9c14e06`으로 먼저 기록했다. 사람 확인이 필요했던 Step 3·4·5·6·7·8·12·13은 사용자가 실기기에서 모두 정상으로 확인했다. 발견 F1·F3은 개별 커밋(`c280c46`·`6c46e23`)으로 고쳤고, F4는 사용자 판단으로 그대로 둔다. 재개 구분선 시각이 UTC로 나오는 F2는 main부터 있던 크로스플랫폼 동작이라 이 브랜치 밖 후속으로 남긴다.
+
+**새 빌드 설치 뒤 확인(남음):** 지금 설치본은 F1·F3·F5 수정 전 빌드다. 새 dmg를 설치하면 처음 한 번 Keychain 허용 창이 뜬다(서명이 바뀌어서다 — 로그인 암호 입력 뒤 "항상 허용"). 그다음 세 가지를 본다.
+- [ ] F1 — 앱 메뉴가 "About / Hide / Quit Multi CLI Work"로 보인다.
+- [ ] F3 — 설정 › 단축키와 타이틀바 메뉴에 `⌥⌘←`·`⇧⌘↩` 같은 기호 라벨이 보인다.
+- [ ] F5 — 설정 › 일반 "창을 닫으면 트레이에 남기기"를 끄고, 세션이 없는 상태에서 빨간 신호등 버튼을 한 번 누른다. 앱이 끝나 Dock 아이콘 아래 점과 메뉴바 트레이 아이콘이 사라져야 한다. 확인한 뒤 설정을 다시 켠다.
 
 ---
 
