@@ -21,7 +21,7 @@
 | macOS 데스크톱 | 기존 Electron 앱에 darwin 분기 추가 | 네이티브(Swift) 재작성 — 세션 엔진·git·원격 서버 전부 재구현이라 비현실적 |
 | iOS | 기존 모바일 웹 UI를 Safari/홈 화면으로 사용 (앱 없음) | SwiftUI 네이티브 셸(Android 대칭) — 무료 계정 7일 재서명 부담, 추후 별도 스펙으로; React Native 재구축 — 웹 서빙 모델 장점 상실 |
 | macOS 자동 업데이트 | 개인용 단계에서 비활성, 수동 안내(기존 `릴리스` 링크 폴백 UI) | 무서명 자동 업데이트 — electron-updater가 macOS에서 지원하지 않음 |
-| macOS 서명 | ad-hoc(`identity: null`), Gatekeeper는 우클릭-열기로 통과 | Developer ID 서명+공증 — 유료 계정 필요, 공개 단계로 연기 |
+| macOS 서명 | ad-hoc(`identity: "-"`, `hardenedRuntime: false`). 로컬 빌드는 격리 속성이 없어 그냥 열리고, 내려받은 사본은 시스템 설정 ▸ 개인정보 보호 및 보안 ▸ "그래도 열기"로 통과 | Developer ID 서명+공증 — 유료 계정 필요, 공개 단계로 연기 |
 | 대상 아키텍처 | arm64 전용 | universal/Intel — 보유 기기가 Apple Silicon뿐, 공개 단계에서 재검토 |
 | iPhone 알림 | 없음 (범위 밖) | APNs — 무료 계정 불가; 웹 푸시 — HTTPS(tailscale cert) 구성 필요, 보류 |
 | CI macOS 러너 | 공개 단계로 연기, 1차는 로컬 검증 | 즉시 3-OS 매트릭스 — 개인용 단계 유지비 과다 |
@@ -79,7 +79,7 @@ keymap이 단일 소스이고 리매핑을 지원하므로 **기본값만 플랫
 ### 3.8 패키징 — `package.json`
 
 - `dist:mac` 스크립트 추가: `electron-builder --mac dmg zip --arm64 --publish never`.
-- `build.mac`: `category: public.app-category.developer-tools`, `icon: build/icon.png`(electron-builder가 icns 변환), `identity: null`(ad-hoc), `artifactName: Multi-CLI-Work-${version}-mac-arm64.${ext}`.
+- `build.mac`: `category: public.app-category.developer-tools`, `icon: build/icon.png`(electron-builder가 icns 변환), `identity: "-"`(ad-hoc — `null`은 서명을 건너뛰어 번들에 resource seal이 없다), `hardenedRuntime: false`(ad-hoc에서 켜 두면 library validation이 실행을 막는다), `artifactName: Multi-CLI-Work-${version}-mac-arm64.${ext}`.
 - hardened runtime·entitlements·공증 설정은 Phase 4에서 추가한다.
 
 ### 3.9 테스트
@@ -126,7 +126,7 @@ Android 로컬 환경은 불필요(릴리스 CI가 APK 빌드). Xcode 전체 설
 | 리스크 | 대응 |
 |---|---|
 | node-pty 빌드 실패(CLT 부재) | 환경 절차 1단계로 못 박음. `rebuild:native` 폴백 |
-| 무서명 앱 Gatekeeper 경고 | 개인용 단계는 우클릭-열기 문서화. 공개 단계에서 공증 |
+| ad-hoc 서명 앱 Gatekeeper 경고 | 개인용 단계는 로컬 빌드라 격리 속성이 없어 해당 없음. 내려받은 사본은 "그래도 열기"(macOS 15+는 우클릭-열기 우회 제거). 공개 단계에서 공증 |
 | ad-hoc 앱의 알림 전달 불안정 | Phase 2에서 실기기 검증, 문제 시 권한 안내 추가 |
 | e2e의 win/linux 전제 | darwin 스킵 조건 정리, 스모크부터 통과 |
 | keymap 기본값 변경의 파급 | 기본값만 플랫폼화, 저장된 리매핑 불변. 기존 win/linux 기본값은 그대로 |

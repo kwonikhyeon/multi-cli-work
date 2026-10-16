@@ -14,7 +14,7 @@
 
 - Node >= 22.12, Electron 43.2.0, 작업 브랜치 `feat/macos-ios-expansion`.
 - **테스트·실행은 Node 22 LTS로**(`nvm use 22`) — 시스템 Node v25.6은 vitest jsdom과 `globalThis.localStorage` 충돌로 171개 테스트가 실패한다(Task 1 보고서). `npm ci` 뒤 Electron 바이너리가 없으면(`Error: Electron uninstall`) `node node_modules/electron/install.js`를 한 번 실행한다.
-- macOS는 **arm64 전용**, 서명은 **ad-hoc**(`identity: null`), **자동 업데이트는 darwin에서 비활성**(수동 안내로 대체).
+- macOS는 **arm64 전용**, 서명은 **ad-hoc**(`identity: "-"`, `hardenedRuntime: false` — `null`은 ad-hoc이 아니라 서명 생략이다), **자동 업데이트는 darwin에서 비활성**(수동 안내로 대체).
 - **Windows/Linux 동작 불변.** 기본값만 플랫폼화하고, 저장된 사용자 keybindings·설정 스키마는 건드리지 않는다.
 - 신규 darwin 분기마다 **유닛 테스트 동반**. 테스트 파일은 대상 파일 옆에 둔다(기존 관례).
 - 각 태스크 끝에 커밋. 커밋 제목은 영어 conventional commit(`feat:`/`fix:`/`test:`/`chore:`), 본문 없이 짧게 — 기존 로그 스타일.
@@ -956,12 +956,13 @@ sips -z 1024 1024 build/icon.png --out build/icon-mac.png
       ],
       "category": "public.app-category.developer-tools",
       "icon": "build/icon-mac.png",
-      "identity": null,
+      "identity": "-",
+      "hardenedRuntime": false,
       "artifactName": "Multi-CLI-Work-${version}-mac-${arch}.${ext}"
     },
 ```
 
-(zip 타깃은 Phase 4에서 자동 업데이트를 켤 때 필요하므로 지금부터 함께 만든다. `identity: null`은 ad-hoc 서명.)
+(zip 타깃은 Phase 4에서 자동 업데이트를 켤 때 필요하므로 지금부터 함께 만든다. `identity: "-"`가 ad-hoc 서명이다 — `null`은 서명을 통째로 건너뛰어 번들에 resource seal이 없고, 내려받은 사본은 "손상됨"으로 거부된다. ad-hoc에 기본값 `hardenedRuntime: true`를 쓰면 library validation이 앱 실행을 막으므로 끈다.)
 
 - [ ] **Step 3: 빌드 실행**
 
@@ -970,7 +971,7 @@ Expected: `release/`에 `Multi-CLI-Work-1.48.0-mac-arm64.dmg`와 `.zip` 생성. 
 
 - [ ] **Step 4: 설치본 수동 검증**
 
-① dmg를 열어 앱을 `/Applications`에 복사 ② Finder에서 **우클릭 → 열기**(Gatekeeper 통과) ③ zsh 세션 생성·입출력 ④ 창 닫기 → 메뉴바 트레이에서 복귀 ⑤ 업데이트 배지가 `수동 업데이트` + `릴리스` 버튼인지 ⑥ 알림: 세션 하나를 입력 대기 상태로 두고 창을 숨겨 데스크톱 알림이 오는지(첫 알림에서 OS 권한 허용). 알림이 안 오면 시스템 설정 › 알림에서 앱 허용 상태를 확인하고 결과를 기록한다.
+① dmg를 열어 앱을 `/Applications`에 복사 ② 더블클릭으로 실행(로컬 빌드는 격리 속성이 없어 Gatekeeper 확인이 없다) ③ zsh 세션 생성·입출력 ④ 창 닫기 → 메뉴바 트레이에서 복귀 ⑤ 업데이트 배지가 `수동 업데이트` + `릴리스` 버튼인지 ⑥ 알림: 세션 하나를 입력 대기 상태로 두고 창을 숨겨 데스크톱 알림이 오는지(첫 알림에서 OS 권한 허용). 알림이 안 오면 시스템 설정 › 알림에서 앱 허용 상태를 확인하고 결과를 기록한다.
 
 - [ ] **Step 5: Commit**
 
@@ -1062,11 +1063,11 @@ git commit -m "test: run the e2e smoke suite on macOS"
 
 **Files:** 없음 (검증만; 발견된 버그는 각각 유닛 테스트와 함께 고쳐 개별 커밋)
 
-**성격:** 이 태스크는 **사람이 GUI 앞에서 하는 검증만**으로 이뤄진다. 자동화 가능한 항목은 선행 태스크에서 이미 실행했고, 여기 남은 것은 Gatekeeper 우클릭·Keychain 승인·Dock 클릭·OS 알림 권한처럼 클릭과 눈이 필요한 것뿐이다. 각 항목은 Task 1–12가 "수동 확인 필요"로 넘긴 것들을 출처와 함께 모았다.
+**성격:** 이 태스크는 **사람이 GUI 앞에서 하는 검증만**으로 이뤄진다. 자동화 가능한 항목은 선행 태스크에서 이미 실행했고, 여기 남은 것은 Keychain 승인·Dock 클릭·OS 알림 권한처럼 클릭과 눈이 필요한 것뿐이다. 각 항목은 Task 1–12가 "수동 확인 필요"로 넘긴 것들을 출처와 함께 모았다.
 
 **준비:** `npm run dist:mac`으로 만든 `release/Multi-CLI-Work-1.48.0-mac-arm64.dmg` (Task 11에서 생성됨).
 
-- [ ] **Step 1: 설치와 Gatekeeper** (Task 11 Step 4) — dmg를 열어 `/Applications`로 복사 → Finder에서 **우클릭 ▸ 열기**로 실행. ad-hoc 서명이라 더블클릭은 차단되는 것이 정상이며, 우클릭 열기 한 번 뒤로는 그냥 열린다. 기동 직후 **GPU 크래시가 재발하지 않는지** 함께 본다(Task 1에서 1회 발생 후 무해로 판단한 건).
+- [ ] **Step 1: 설치와 첫 실행** (Task 11 Step 4) — dmg를 열어 `/Applications`로 복사 → 더블클릭으로 실행. 로컬에서 빌드한 dmg는 격리 속성(`com.apple.quarantine`)이 붙지 않아 Gatekeeper 확인 없이 열린다(내려받은 사본이라면 macOS 15+에는 우클릭-열기 우회가 없으니 차단 뒤 시스템 설정 ▸ 개인정보 보호 및 보안 ▸ "그래도 열기"). **`npm run dev` 인스턴스가 떠 있으면 패키징본은 같은 userData의 singleton lock에 막혀 대화상자 없이 종료된다** — dev를 끄거나 `MULTI_CLI_WORK_USER_DATA`로 dev의 userData를 분리한다. 기동 직후 **GPU 크래시가 재발하지 않는지** 함께 본다(Task 1에서 1회 발생 후 무해로 판단한 건).
 - [ ] **Step 2: zsh 세션** (Task 4, Task 11 Step 4) — 새 세션 런처에 **zsh**가 보이고 그것으로 세션을 만들면 `echo $SHELL`이 zsh로 응답하는지. 입출력·종료가 정상인지(패키징본에서 `spawn-helper`가 실제로 실행되는지를 확인하는 유일한 경로 — 자동 검증은 파일 존재와 실행 비트까지만 했다).
 - [ ] **Step 3: 트레이 상주와 복귀** (Task 9, 10, 11 Step 4) — 창을 닫아 메뉴바 트레이로 내려간 뒤 ① 트레이 아이콘으로 복귀, ② **Dock 아이콘 클릭으로 복귀**(`app.on("activate")` 경로) 둘 다 확인. macOS 트레이는 단일 클릭이 컨텍스트 메뉴를 열어 `double-click` 이벤트가 오지 않을 수 있는데, 컨텍스트 메뉴의 "멀티 터미널 작업기 표시"와 Dock 복귀가 있으므로 기능 손실은 아니다 — 실제로 어느 경로가 동작하는지 기록한다.
 - [ ] **Step 4: 메뉴바와 Cmd+Q** (Task 9) — 메뉴바에 앱 메뉴(앱·편집·창 3개)가 보이는지. 세션 하나를 띄운 채 **Cmd+Q**로 종료 → 재시작했을 때 중단 세션 복원 안내가 뜨는지.
