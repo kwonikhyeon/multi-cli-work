@@ -190,7 +190,30 @@ describe("acceleratorLabel", () => {
     expect(acceleratorLabel("Cmd+Alt+I", "darwin")).toBe("⌥⌘I");
     expect(acceleratorLabel("F5", "darwin")).toBe("F5");
   });
+  it("darwin은 키 이름도 mac 기호로 그린다 — 화살표·Return·Tab·Page 키", () => {
+    expect(acceleratorLabel("Cmd+Alt+ArrowLeft", "darwin")).toBe("⌥⌘←");
+    expect(acceleratorLabel("Cmd+Alt+ArrowRight", "darwin")).toBe("⌥⌘→");
+    expect(acceleratorLabel("Cmd+Alt+ArrowUp", "darwin")).toBe("⌥⌘↑");
+    expect(acceleratorLabel("Cmd+Alt+ArrowDown", "darwin")).toBe("⌥⌘↓");
+    expect(acceleratorLabel("Cmd+Shift+Enter", "darwin")).toBe("⇧⌘↩");
+    expect(acceleratorLabel("Ctrl+Tab", "darwin")).toBe("⌃⇥");
+    expect(acceleratorLabel("Ctrl+Shift+Tab", "darwin")).toBe("⌃⇧⇥");
+    expect(acceleratorLabel("Ctrl+PageUp", "darwin")).toBe("⌃⇞");
+    expect(acceleratorLabel("Ctrl+PageDown", "darwin")).toBe("⌃⇟");
+  });
+  it("리매핑으로 들어올 수 있는 다른 특수 키도 기호로 그리고, 기호가 없는 키는 이름 그대로 둔다", () => {
+    expect(acceleratorLabel("Cmd+Escape", "darwin")).toBe("⌘⎋");
+    expect(acceleratorLabel("Cmd+Backspace", "darwin")).toBe("⌘⌫");
+    expect(acceleratorLabel("Cmd+Delete", "darwin")).toBe("⌘⌦");
+    expect(acceleratorLabel("Cmd+Home", "darwin")).toBe("⌘↖");
+    expect(acceleratorLabel("Cmd+End", "darwin")).toBe("⌘↘");
+    expect(acceleratorLabel("Cmd+Space", "darwin")).toBe("⌘Space");
+    expect(acceleratorLabel("Cmd+Insert", "darwin")).toBe("⌘Insert");
+    expect(acceleratorLabel("Cmd+constructor", "darwin")).toBe("⌘constructor");
+  });
   it("다른 플랫폼은 그대로 둔다", () => {
     expect(acceleratorLabel("Ctrl+P", "win32")).toBe("Ctrl+P");
+    expect(acceleratorLabel("Ctrl+Alt+ArrowLeft", "win32")).toBe("Ctrl+Alt+ArrowLeft");
+    expect(acceleratorLabel("Ctrl+Shift+Enter", "linux")).toBe("Ctrl+Shift+Enter");
   });
 });

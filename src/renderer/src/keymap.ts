@@ -163,6 +163,23 @@ const MAC_SYMBOL_ORDER: ReadonlyArray<[token: string, symbol: string]> = [
   ["Cmd", "⌘"],
 ];
 
+/** macOS 메뉴가 키 이름 대신 쓰는 기호. 여기 없는 키(문자·숫자·F키·Space 등)는 토큰 그대로 그린다. */
+const MAC_KEY_SYMBOLS: ReadonlyMap<string, string> = new Map([
+  ["ArrowLeft", "←"],
+  ["ArrowRight", "→"],
+  ["ArrowUp", "↑"],
+  ["ArrowDown", "↓"],
+  ["Enter", "↩"],
+  ["Tab", "⇥"],
+  ["PageUp", "⇞"],
+  ["PageDown", "⇟"],
+  ["Home", "↖"],
+  ["End", "↘"],
+  ["Escape", "⎋"],
+  ["Backspace", "⌫"],
+  ["Delete", "⌦"],
+]);
+
 export function acceleratorLabel(accelerator: string, platform: NodeJS.Platform): string {
   if (platform !== "darwin") return accelerator;
   const parts = accelerator.split("+");
@@ -170,7 +187,7 @@ export function acceleratorLabel(accelerator: string, platform: NodeJS.Platform)
   const symbols = MAC_SYMBOL_ORDER.filter(([token]) => parts.includes(token))
     .map(([, symbol]) => symbol)
     .join("");
-  return `${symbols}${key}`;
+  return `${symbols}${MAC_KEY_SYMBOLS.get(key) ?? key}`;
 }
 
 export function isBindableAccelerator(accelerator: string, platform: NodeJS.Platform): boolean {
